@@ -8,9 +8,15 @@ on:
 jobs:
   ipo-edge-daily:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
-      - name: Placeholder
-        run: |
-          echo "IPO EDGE automation scaffold"
-          echo "Next: connect discovery/research runner and NEON_DATABASE_URL secret"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install .
+      - name: Verify database secret is available
+        run: python -c "import os; assert os.environ.get('DATABASE_URL'), 'DATABASE_URL secret missing'; print('DATABASE_URL available')"
+      - name: Build current IPO discovery snapshot
+        run: python scripts/build_universe.py
