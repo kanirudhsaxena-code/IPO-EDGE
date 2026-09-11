@@ -1,8 +1,12 @@
 {
   "business_quality": {
-    "method": "evidence_rubric",
-    "description": "Manual/structured evidence rubric for business quality. Each verified sub-factor is scored 0.0-1.0, then averaged.",
-    "subfactors": ["market_position", "revenue_visibility", "customer_concentration", "scalability", "industry_structure"]
+    "method": "objective_rhp_proxy",
+    "description": "Backtest-safe structured proxy derived only from pre-listing/RHP-sourced facts. No post-listing information is used.",
+    "company_age_years": [[0,0.20],[3,0.40],[5,0.55],[10,0.75],[15,0.90],[25,1.00]],
+    "latest_revenue_cr": [[0,0.15],[10,0.30],[25,0.45],[50,0.60],[100,0.75],[250,0.90],[500,1.00]],
+    "profitable_period_ratio": [[0,0.00],[0.50,0.40],[0.75,0.70],[1.00,1.00]],
+    "formula": "0.35_company_age_plus_0.35_revenue_scale_plus_0.30_profitability_continuity; normalize over available factors; minimum 2 factors",
+    "note": "This is an auditable V1.0 proxy for R1. Qualitative competitive-position enhancements may be proposed later by the learning loop but cannot silently change V1.0."
   },
   "financial_quality": {
     "roe_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
@@ -32,11 +36,14 @@
     "formula": "0.8_subscribe_ratio_plus_0.2_coverage_depth"
   },
   "sector_ipo_environment": {
-    "method": "explicit_verified_normalized_score",
-    "description": "Requires a dated normalized environment score from contemporaneous market/sector evidence. No listing outcome may be used."
+    "method": "cutoff_safe_nifty_regime",
+    "description": "Uses only NIFTY sessions dated on or before the IPO T2 cutoff. No listing outcome is used.",
+    "nifty_20d_return_pct": [[-12,0.00],[-8,0.20],[-5,0.35],[0,0.60],[3,0.75],[6,0.90],[10,1.00]],
+    "nifty_20d_vol_pct": [[10,1.00],[15,0.90],[20,0.75],[25,0.60],[30,0.40],[40,0.15],[50,0.00]],
+    "formula": "0.7_momentum_plus_0.3_inverse_volatility"
   },
   "gmp_confirmation": {
     "gmp_pct": [[-10,0.00],[0,0.20],[5,0.35],[10,0.50],[20,0.70],[30,0.85],[40,0.95],[50,1.00]],
-    "description": "Secondary confirmation only; capped by its frozen 5-point top-level weight."
+    "description": "Secondary confirmation only; capped by its frozen 5-point top-level weight. Historical runs use only explicitly dated GMP observations at or before T2."
   }
 }
