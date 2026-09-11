@@ -47,7 +47,7 @@ def main():
         ipo_id, company_name, segment, opened, closed, issue_price = matched
         cutoff = closed or opened
         ipoji = fetch_detail(company_name, evidence_cutoff=cutoff)
-        analyst = fetch_consensus(company_name)
+        analyst = fetch_consensus(company_name, evidence_cutoff=cutoff)
         environment = fetch_nifty_environment(cutoff)
 
         scores = {
