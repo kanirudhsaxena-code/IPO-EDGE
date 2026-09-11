@@ -22,8 +22,11 @@ jobs:
           python-version: '3.11'
       - run: pip install .
       - run: python scripts/build_universe.py
+      - run: python scripts/normalize_universe.py
       - uses: actions/upload-artifact@v4
         with:
           name: ipo-edge-backtest-universe
-          path: data/backtest/universe_discovered.json
+          path: |
+            data/backtest/universe_core.json
+            data/backtest/outcomes_discovery_only.json
           retention-days: 30
