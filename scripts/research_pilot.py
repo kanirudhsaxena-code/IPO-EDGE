@@ -43,7 +43,8 @@ def main():
             continue
 
         ipo_id, company_name, segment, opened, closed, issue_price = matched
-        ipoji = fetch_detail(company_name)
+        cutoff = closed or opened
+        ipoji = fetch_detail(company_name, evidence_cutoff=cutoff)
         analyst = fetch_consensus(company_name)
 
         scores = {
@@ -62,6 +63,7 @@ def main():
             "segment": segment,
             "issue_open_date": opened.isoformat(),
             "issue_close_date": closed.isoformat() if closed else None,
+            "evidence_cutoff": cutoff.isoformat(),
             "issue_price": float(issue_price) if issue_price is not None else None,
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "ipoji": {k:v for k,v in ipoji.items() if k != "raw_text"},
