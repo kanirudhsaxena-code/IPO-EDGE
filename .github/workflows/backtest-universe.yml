@@ -15,6 +15,8 @@ on:
 jobs:
   build-universe:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,6 +25,8 @@ jobs:
       - run: pip install .
       - run: python scripts/build_universe.py
       - run: python scripts/normalize_universe.py
+      - name: Load leakage-safe universe into Neon
+        run: python scripts/load_universe.py
       - uses: actions/upload-artifact@v4
         with:
           name: ipo-edge-backtest-universe
