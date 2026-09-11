@@ -6,10 +6,12 @@ from pathlib import Path
 
 from ipo_edge.adapters.ipoji import fetch_detail
 from ipo_edge.adapters.ipoguru import fetch_consensus
+from ipo_edge.adapters.market_env import fetch_nifty_environment
 from ipo_edge.component_rules import (
-    score_financial, score_valuation, score_institutional,
-    score_demand, score_analyst, score_gmp,
+    score_business, score_financial, score_valuation, score_institutional,
+    score_demand, score_analyst, score_environment, score_gmp,
 )
+from ipo_edge.scoring import calculate_score
 from ipo_edge.db import connect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,17 +48,28 @@ def main():
         cutoff = closed or opened
         ipoji = fetch_detail(company_name, evidence_cutoff=cutoff)
         analyst = fetch_consensus(company_name)
+        environment = fetch_nifty_environment(cutoff)
 
         scores = {
+            "business_quality": score_business(
+                ipoji.get("company_age_years"), ipoji.get("latest_revenue_cr"), ipoji.get("profitable_period_ratio")
+            ),
             "financial_quality": score_financial(ipoji.get("roe_pct"), ipoji.get("roce_pct"), ipoji.get("debt_equity")),
             "valuation": score_valuation(ipoji.get("pe_post")),
             "institutional_conviction": score_institutional(ipoji.get("qib_x")),
             "market_demand": score_demand(ipoji.get("total_x"), ipoji.get("nii_x"), ipoji.get("retail_x")),
             "analyst_consensus": score_analyst(analyst.get("subscribe_count"), analyst.get("analyst_count")),
+            "sector_ipo_environment": score_environment(
+                environment.get("nifty_20d_return_pct"), environment.get("nifty_20d_vol_pct")
+            ),
             "gmp_confirmation": score_gmp(ipoji.get("gmp_pct")),
-            "business_quality": None,
-            "sector_ipo_environment": None,
         }
+        critical_verified = all(
+            scores.get(k) is not None
+            for k in ("financial_quality", "valuation", "institutional_conviction", "market_demand")
+        )
+        scored = calculate_score(scores, critical_evidence_verified=critical_verified)
+
         results.append({
             "ipo_id": ipo_id,
             "company_name": company_name,
@@ -68,13 +81,24 @@ def main():
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "ipoji": {k:v for k,v in ipoji.items() if k != "raw_text"},
             "analyst": analyst,
+            "environment": environment,
             "derived_scores": scores,
-            "status": "PARTIAL_EVIDENCE" if any(v is None for v in scores.values()) else "READY_FOR_CHECKPOINT",
+            "score_result": {
+                "score": scored.score,
+                "grade": scored.grade,
+                "decision": scored.decision,
+                "hard_blocker": scored.hard_blocker,
+            },
+            "status": "READY_FOR_CHECKPOINT" if scored.score is not None else "PARTIAL_EVIDENCE",
         })
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(results, indent=2, ensure_ascii=False))
-    print(json.dumps({"pilot_count": len(results), "ready": sum(r.get("status") == "READY_FOR_CHECKPOINT" for r in results)}, indent=2))
+    print(json.dumps({
+        "pilot_count": len(results),
+        "ready": sum(r.get("status") == "READY_FOR_CHECKPOINT" for r in results),
+        "grades": {r.get("company_name"): (r.get("score_result") or {}).get("grade") for r in results},
+    }, indent=2))
 
 
 if __name__ == "__main__":
