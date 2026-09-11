@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+from datetime import date, datetime, timezone
 from difflib import SequenceMatcher
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
@@ -15,6 +17,53 @@ UA = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-IN,en;q=0.9"}
 def _norm(value: str) -> str:
     value = value.lower().replace("sme ipo", "").replace("ipo", "")
     return re.sub(r"[^a-z0-9]+", " ", value).strip()
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d", "%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return None
+
+
+def _published_at(soup: BeautifulSoup) -> datetime | None:
+    for attrs in (
+        {"property": "article:published_time"},
+        {"name": "article:published_time"},
+        {"itemprop": "datePublished"},
+    ):
+        tag = soup.find("meta", attrs=attrs)
+        if tag and tag.get("content"):
+            parsed = _parse_datetime(tag.get("content"))
+            if parsed:
+                return parsed
+    time_tag = soup.find("time")
+    if time_tag:
+        parsed = _parse_datetime(time_tag.get("datetime") or time_tag.get_text(" ", strip=True))
+        if parsed:
+            return parsed
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        try:
+            payload = json.loads(script.string or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        nodes = payload if isinstance(payload, list) else [payload]
+        for node in nodes:
+            if isinstance(node, dict):
+                parsed = _parse_datetime(node.get("datePublished"))
+                if parsed:
+                    return parsed
+    return None
 
 
 def _sitemap_urls(timeout=20):
@@ -55,23 +104,35 @@ def discover_review_url(company_name: str, timeout=20):
     return url if score >= 0.55 else None
 
 
-def fetch_consensus(company_name: str, timeout=20):
+def fetch_consensus(company_name: str, timeout=20, evidence_cutoff: date | None = None):
     url = discover_review_url(company_name, timeout=timeout)
     if not url:
-        return {"company_name": company_name, "found": False, "source_url": None}
+        return {"company_name": company_name, "found": False, "source_url": None, "historically_eligible": False}
     r = requests.get(url, headers=UA, timeout=timeout)
     r.raise_for_status()
-    text = BeautifulSoup(r.text, "html.parser").get_text(" ", strip=True)
+    soup = BeautifulSoup(r.text, "html.parser")
+    text = soup.get_text(" ", strip=True)
+    published = _published_at(soup)
+    eligible = False
+    if published and evidence_cutoff:
+        eligible = published.date() <= evidence_cutoff
+    elif published and evidence_cutoff is None:
+        eligible = True
+
     reviewed = re.search(r"reviewed by\s+(\d+)\s+analyst", text, re.I)
     subscribe = re.search(r"(\d+)\s+recommend subscribing", text, re.I)
     avoid = re.search(r"(\d+)\s+advise caution or avoidance", text, re.I)
     score = re.search(r"carrying a score of\s+(\d+(?:\.\d+)?)", text, re.I)
+
     return {
         "company_name": company_name,
         "found": True,
         "source_url": url,
-        "analyst_count": int(reviewed.group(1)) if reviewed else None,
-        "subscribe_count": int(subscribe.group(1)) if subscribe else None,
-        "avoid_count": int(avoid.group(1)) if avoid else None,
-        "consensus_score": float(score.group(1)) if score else None,
+        "published_at": published.isoformat() if published else None,
+        "evidence_cutoff": evidence_cutoff.isoformat() if evidence_cutoff else None,
+        "historically_eligible": eligible,
+        "analyst_count": int(reviewed.group(1)) if (eligible and reviewed) else None,
+        "subscribe_count": int(subscribe.group(1)) if (eligible and subscribe) else None,
+        "avoid_count": int(avoid.group(1)) if (eligible and avoid) else None,
+        "consensus_score": float(score.group(1)) if (eligible and score) else None,
     }
