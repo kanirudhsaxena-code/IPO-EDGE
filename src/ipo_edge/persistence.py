@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+DB_BLOCKS = {
+    "R1": "R1_BUSINESS",
+    "R2": "R2_FINANCIALS",
+    "R3": "R3_VALUATION",
+    "R4": "R4_PROMOTER_ISSUE",
+    "R5": "R5_ANALYST",
+    "R6": "R6_INSTITUTIONAL",
+    "R7": "R7_DEMAND",
+    "R8": "R8_ENVIRONMENT",
+}
+
 
 def insert_evidence(conn, ipo_id, checkpoint_id, item):
+    block = DB_BLOCKS.get(item.block, item.block)
     row = conn.execute(
         "INSERT INTO research_evidence (ipo_id,checkpoint_id,research_block,field_name,value_text,numeric_value,source_url,source_name,published_at,retrieved_at,verification_status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING evidence_id",
-        (ipo_id, checkpoint_id, item.block, item.field_name, item.value_text, item.numeric_value, item.source_url, item.source_name, item.published_at, item.retrieved_at, item.verification_status),
+        (ipo_id, checkpoint_id, block, item.field_name, item.value_text, item.numeric_value, item.source_url, item.source_name, item.published_at, item.retrieved_at, item.verification_status),
     ).fetchone()
     return int(row[0])
 
