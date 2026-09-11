@@ -41,21 +41,20 @@ def calculate_score(
 ) -> ScoreResult:
     """Score one IPO using frozen V1.0 weights.
 
-    Component values are normalized 0..1 evidence-quality scores. Missing critical
-    evidence or a hard blocker prevents A+/A++ irrespective of arithmetic score.
+    Missing *critical* evidence or a hard blocker yields NV. Missing non-critical
+    components are scored conservatively at zero rather than causing NV. This
+    prevents optional/secondary evidence such as GMP from becoming a hidden
+    mandatory gate while preserving the frozen 100-point weights.
     """
     if hard_blocker:
         return ScoreResult(None, "NV", "NO_ACTION", hard_blocker)
     if not critical_evidence_verified:
         return ScoreResult(None, "NV", "NO_ACTION", "CRITICAL_EVIDENCE_NOT_VERIFIED")
 
-    missing = [key for key in WEIGHTS if component_scores.get(key) is None]
-    if missing:
-        return ScoreResult(None, "NV", "NO_ACTION", f"MISSING_COMPONENTS:{','.join(missing)}")
-
     total = 0.0
     for key, weight in WEIGHTS.items():
-        value = float(component_scores[key])
+        raw = component_scores.get(key)
+        value = 0.0 if raw is None else float(raw)
         if not 0 <= value <= 1:
             raise ValueError(f"{key} must be in [0,1], got {value}")
         total += value * weight
