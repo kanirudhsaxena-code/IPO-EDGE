@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from difflib import SequenceMatcher
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 BASE = "https://www.ipoji.com"
 LIST_URL = BASE + "/ipo-list?year=2026"
 UA = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-IN,en;q=0.9"}
+OFFICIAL_DOC_DOMAINS = ("sebi.gov.in", "nseindia.com", "bseindia.com")
 
 
 def _norm(value: str) -> str:
@@ -45,6 +46,20 @@ def _series_from_row(soup: BeautifulSoup, label: str) -> list[float]:
                 vals.append(float(m.group(0).replace(",", "")))
         return vals
     return []
+
+
+def _official_document_url(soup: BeautifulSoup) -> str | None:
+    candidates = []
+    for a in soup.select("a[href]"):
+        href = urljoin(BASE, a.get("href"))
+        label = a.get_text(" ", strip=True).lower()
+        host = urlparse(href).netloc.lower().removeprefix("www.")
+        official = any(host == d or host.endswith("." + d) for d in OFFICIAL_DOC_DOMAINS)
+        doc_like = any(token in label for token in ("rhp", "drhp", "prospectus", "offer document")) or href.lower().endswith(".pdf")
+        if official and doc_like:
+            priority = 0 if "rhp" in label and "drhp" not in label else 1
+            candidates.append((priority, href))
+    return min(candidates)[1] if candidates else None
 
 
 def discover_detail_url(company_name: str, timeout: int = 20) -> str | None:
@@ -96,6 +111,7 @@ def fetch_detail(company_name: str, timeout: int = 20, evidence_cutoff: date | N
     soup = BeautifulSoup(r.text, "html.parser")
     text = soup.get_text(" ", strip=True)
     gmp_pct, gmp_observed_date = _historical_gmp(soup, evidence_cutoff)
+    official_document_url = _official_document_url(soup)
 
     incorporation_year = None
     m = re.search(r"incorporated\s+(?:in|on)\s+(?:[A-Za-z]+\s+)?(19\d{2}|20\d{2})", text, flags=re.I)
@@ -117,6 +133,8 @@ def fetch_detail(company_name: str, timeout: int = 20, evidence_cutoff: date | N
         "company_name": company_name,
         "source_url": url,
         "found": True,
+        "official_document_url": official_document_url,
+        "r4_document_verified": official_document_url is not None,
         "qib_x": _num(r"Qualified Institutional Buyers \(QIBs\)\s*(\d+(?:\.\d+)?)x", text),
         "nii_x": _num(r"Non-Institutional Investors \(NIIs\)\s*(\d+(?:\.\d+)?)x", text),
         "retail_x": _num(r"(?:Retail|Individual)\s*(\d+(?:\.\d+)?)x", text),
