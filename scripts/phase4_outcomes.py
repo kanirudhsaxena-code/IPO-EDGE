@@ -65,7 +65,7 @@ def main():
     with connect() as conn:
         rows = conn.execute("""
             SELECT i.ipo_id,i.company_name,i.issue_price,c.checkpoint_id,c.grade,c.base_gain_estimate
-            FROM ipos i JOIN checkpoints c ON c.ipo_id=i.ipo_id AND c.checkpoint_type='T2_FINAL'
+            FROM ipos i JOIN checkpoints c ON c.ipo_id=i.ipo_id AND c.checkpoint_type='T2_FINAL_DAY'
             WHERE i.issue_open_date BETWEEN DATE '2026-04-01' AND DATE '2026-06-30'
             ORDER BY i.issue_open_date,i.company_name
         """).fetchall()
@@ -105,7 +105,7 @@ def main():
                 as_of_date,framework_version,universe_count,recommendation_count,positive_hit_rate,twenty_percent_hit_rate,
                 a_plus_plus_hit_rate,a_plus_hit_rate,opportunity_capture_rate,miss_rate,false_positive_rate,
                 correct_avoidance_rate,avg_recommended_gain,avg_estimated_gain,forecast_error,upgrade_hit_rate,created_at
-            ) VALUES (DATE '2026-06-30','1.0',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+            ) VALUES (DATE '2026-07-02','1.0',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
         """, (
             len(records), eff.recommendation_count, eff.positive_hit_rate, eff.twenty_percent_hit_rate,
             eff.a_plus_plus_hit_rate, eff.a_plus_hit_rate, eff.opportunity_capture_rate, eff.miss_rate,
