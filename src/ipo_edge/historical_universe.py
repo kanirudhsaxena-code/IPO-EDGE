@@ -1,18 +1,9 @@
 from __future__ import annotations
 
-import re
 from dataclasses import asdict, dataclass
-from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
-
-ROW_RE = re.compile(
-    r"(?P<company>.+?)(?P<segment>Mainboard|SME)\s+\|\s+"
-    r"(?P<status>[^|]+)\|\s+₹?(?P<price>[^|]+)\|\s+"
-    r"(?P<gmp>[^|]+)\|\s+(?P<sub>[^|]+)\|\s+"
-    r"(?P<dates>[^|]+)\|\s+(?P<listing>.+)$"
-)
 
 
 @dataclass(frozen=True)
@@ -26,20 +17,37 @@ class UniverseRow:
     discovery_source: str
 
 
+def _segment(text: str) -> str | None:
+    low = text.lower()
+    if "sme" in low and "mainboard" not in low:
+        return "SME"
+    if "mainboard" in low:
+        return "MAINBOARD"
+    return None
+
+
 def parse_calendar(url: str, timeout: int = 20) -> list[UniverseRow]:
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 IPO-EDGE/1.0"}, timeout=timeout)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+        "Accept-Language": "en-IN,en;q=0.9",
+    }
+    response = requests.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     rows: list[UniverseRow] = []
-    for tr in soup.select("table tbody tr"):
-        cells = [td.get_text(" ", strip=True) for td in tr.select("td")]
-        if len(cells) < 7:
+
+    # Some archive pages omit an explicit <tbody>, so scan every table row.
+    for tr in soup.select("table tr"):
+        cells = [td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"])]
+        if len(cells) < 7 or cells[0].lower().startswith("company"):
             continue
-        company_cell = cells[0]
-        segment = "SME" if "SME" in company_cell else "MAINBOARD" if "Mainboard" in company_cell else None
+        row_text = " ".join(cells[:2])
+        segment = _segment(row_text)
         if not segment:
             continue
-        company = company_cell.replace("Mainboard", "").replace("SME", "").strip()
+        company = cells[0].replace("Mainboard", "").replace("SME", "").strip()
+        if not company:
+            continue
         rows.append(
             UniverseRow(
                 company_name=company,
@@ -57,11 +65,19 @@ def parse_calendar(url: str, timeout: int = 20) -> list[UniverseRow]:
 def build_universe(urls: list[str]) -> list[dict]:
     output: list[dict] = []
     seen: set[tuple[str, str]] = set()
+    failures: list[str] = []
     for url in urls:
-        for row in parse_calendar(url):
+        rows = parse_calendar(url)
+        if not rows:
+            failures.append(url)
+        for row in rows:
             key = (row.company_name.lower(), row.issue_dates_text)
             if key in seen:
                 continue
             seen.add(key)
             output.append(asdict(row))
+    if not output:
+        raise RuntimeError("Historical IPO discovery returned zero rows; sources/parsing require repair")
+    if failures:
+        print("WARNING: no rows from:", ", ".join(failures))
     return output
