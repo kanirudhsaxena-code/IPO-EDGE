@@ -4,6 +4,7 @@ import json
 import re
 from datetime import date, datetime, timezone
 from difflib import SequenceMatcher
+from functools import lru_cache
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
@@ -66,6 +67,7 @@ def _published_at(soup: BeautifulSoup) -> datetime | None:
     return None
 
 
+@lru_cache(maxsize=4)
 def _sitemap_urls(timeout=20):
     pending = [BASE + "/sitemap.xml"]
     seen = set()
@@ -88,7 +90,7 @@ def _sitemap_urls(timeout=20):
                 reviews.append(loc)
             elif "sitemap" in urlparse(loc).path:
                 pending.append(loc)
-    return reviews
+    return tuple(reviews)
 
 
 def discover_review_url(company_name: str, timeout=20):
