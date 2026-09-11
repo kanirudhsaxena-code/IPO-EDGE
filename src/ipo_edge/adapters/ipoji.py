@@ -12,6 +12,7 @@ BASE = "https://www.ipoji.com"
 LIST_URL = BASE + "/ipo-list?year=2026"
 UA = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-IN,en;q=0.9"}
 OFFICIAL_DOC_DOMAINS = ("sebi.gov.in", "nseindia.com", "bseindia.com")
+OFFER_DOC_TOKENS = ("rhp", "drhp", "prospectus", "offer document", "red herring")
 
 
 def _norm(value: str) -> str:
@@ -53,11 +54,12 @@ def _official_document_url(soup: BeautifulSoup) -> str | None:
     for a in soup.select("a[href]"):
         href = urljoin(BASE, a.get("href"))
         label = a.get_text(" ", strip=True).lower()
+        href_l = href.lower()
         host = urlparse(href).netloc.lower().removeprefix("www.")
         official = any(host == d or host.endswith("." + d) for d in OFFICIAL_DOC_DOMAINS)
-        doc_like = any(token in label for token in ("rhp", "drhp", "prospectus", "offer document")) or href.lower().endswith(".pdf")
+        doc_like = any(token in label or token.replace(" ", "") in href_l.replace("_", "").replace("-", "") for token in OFFER_DOC_TOKENS)
         if official and doc_like:
-            priority = 0 if "rhp" in label and "drhp" not in label else 1
+            priority = 0 if (("rhp" in label or "rhp" in href_l) and "drhp" not in label and "drhp" not in href_l) else 1
             candidates.append((priority, href))
     return min(candidates)[1] if candidates else None
 
