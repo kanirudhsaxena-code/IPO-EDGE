@@ -1,0 +1,37 @@
+{
+  "version": "1.1-candidate",
+  "status": "PROPOSED_NOT_PRODUCTION",
+  "base_version": "1.0",
+  "base_score_weights_unchanged": true,
+  "base_grade_thresholds_unchanged": true,
+  "critical_evidence_policy_unchanged": true,
+  "validated_overlay": {
+    "name": "institutional_demand_lane",
+    "requirements": {
+      "institutional_conviction_min": 0.85,
+      "market_demand_min": 0.80,
+      "all_critical_evidence_verified": true,
+      "hard_blocker": false
+    },
+    "effect": "ACTIONABLE_CANDIDATE",
+    "historical_validation": {
+      "development_precision": 0.692,
+      "development_recall": 0.750,
+      "validation_precision": 0.750,
+      "validation_recall": 0.9231
+    }
+  },
+  "evidence_recovery": {
+    "mandatory_before_nv": true,
+    "minimum_independent_source_attempts": 2,
+    "source_hierarchy_must_be_respected": true,
+    "unresolved_critical_evidence_remains_nv": true,
+    "never_impute_missing_critical_evidence": true
+  },
+  "rejected_changes": [
+    "lower_global_score_threshold",
+    "automatic_weight_reoptimization",
+    "relax_nv_gate"
+  ],
+  "production_activation_requires_user_approval": true
+}
