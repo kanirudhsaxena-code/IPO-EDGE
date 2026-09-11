@@ -1,0 +1,42 @@
+{
+  "business_quality": {
+    "method": "evidence_rubric",
+    "description": "Manual/structured evidence rubric for business quality. Each verified sub-factor is scored 0.0-1.0, then averaged.",
+    "subfactors": ["market_position", "revenue_visibility", "customer_concentration", "scalability", "industry_structure"]
+  },
+  "financial_quality": {
+    "roe_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
+    "roce_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
+    "debt_equity": [[0,1.00],[0.25,0.90],[0.50,0.75],[1.00,0.55],[1.50,0.35],[2.00,0.20]],
+    "aggregation": "mean_available_min_2"
+  },
+  "valuation": {
+    "pe_post": [[10,0.95],[15,0.90],[20,0.80],[25,0.70],[35,0.55],[50,0.35],[75,0.20]],
+    "description": "Absolute PE is a fallback only. Peer-relative valuation evidence, when verified, should override via explicit normalized_score.",
+    "aggregation": "peer_relative_override_else_pe"
+  },
+  "institutional_conviction": {
+    "qib_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+    "anchor_quality": "optional_verified_override",
+    "aggregation": "qib_80_anchor_20_if_anchor_verified_else_qib_only"
+  },
+  "market_demand": {
+    "total_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+    "nii_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+    "retail_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+    "aggregation": "0.5_total_0.3_nii_0.2_retail"
+  },
+  "analyst_consensus": {
+    "method": "subscribe_ratio_with_depth",
+    "coverage_depth": [[0,0.00],[1,0.55],[3,0.70],[5,0.80],[10,0.90],[15,1.00]],
+    "formula": "0.8_subscribe_ratio_plus_0.2_coverage_depth"
+  },
+  "sector_ipo_environment": {
+    "method": "explicit_verified_normalized_score",
+    "description": "Requires a dated normalized environment score from contemporaneous market/sector evidence. No listing outcome may be used."
+  },
+  "gmp_confirmation": {
+    "gmp_pct": [[-10,0.00],[0,0.20],[5,0.35],[10,0.50],[20,0.70],[30,0.85],[40,0.95],[50,1.00]],
+    "description": "Secondary confirmation only; capped by its frozen 5-point top-level weight."
+  }
+}
