@@ -1,0 +1,25 @@
+{
+  "framework_version": "1.0",
+  "period": {"start": "2026-04-01", "end": "2026-09-10"},
+  "development_period": {"start": "2026-04-01", "end": "2026-06-30"},
+  "validation_period": {"start": "2026-07-01", "end": "2026-09-10"},
+  "policy": {
+    "index_sources_are_discovery_only": true,
+    "production_outcomes_require_cross_check": true,
+    "pre_listing_evidence_must_predate_checkpoint": true,
+    "actual_outcome_hidden_until_t2_frozen": true
+  },
+  "monthly_discovery_sources": [
+    "https://ipomarkets.com/ipo-calendar/april-2026",
+    "https://ipomarkets.com/ipo-calendar/may-2026",
+    "https://ipomarkets.com/ipo-calendar/june-2026",
+    "https://ipomarkets.com/ipo-calendar/july-2026",
+    "https://ipomarkets.com/ipo-calendar/august-2026",
+    "https://ipomarkets.com/ipo-calendar/september-2026"
+  ],
+  "primary_verification_sources": [
+    "https://www.nseindia.com/market-data/all-upcoming-issues-ipo",
+    "https://www.nseindia.com/companies-listing/corporate-public-issue-advertisements",
+    "https://www.bseindia.com/"
+  ]
+}
