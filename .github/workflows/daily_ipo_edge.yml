@@ -1,0 +1,16 @@
+name: IPO EDGE Daily
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 2 * * 1-5' # 08:00 IST, weekdays
+
+jobs:
+  ipo-edge-daily:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: |
+          echo "IPO EDGE automation scaffold"
+          echo "Next: connect discovery/research runner and NEON_DATABASE_URL secret"
