@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 RULES = {
+    "business_quality": {
+        "company_age_years": [[0,0.20],[3,0.40],[5,0.55],[10,0.75],[15,0.90],[25,1.00]],
+        "latest_revenue_cr": [[0,0.15],[10,0.30],[25,0.45],[50,0.60],[100,0.75],[250,0.90],[500,1.00]],
+        "profitable_period_ratio": [[0,0.00],[0.50,0.40],[0.75,0.70],[1.00,1.00]],
+    },
     "financial_quality": {
         "roe_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
         "roce_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
@@ -19,6 +24,10 @@ RULES = {
     },
     "analyst_consensus": {
         "coverage_depth": [[0,0.00],[1,0.55],[3,0.70],[5,0.80],[10,0.90],[15,1.00]],
+    },
+    "sector_ipo_environment": {
+        "nifty_20d_return_pct": [[-12,0.00],[-8,0.20],[-5,0.35],[0,0.60],[3,0.75],[6,0.90],[10,1.00]],
+        "nifty_20d_vol_pct": [[10,1.00],[15,0.90],[20,0.75],[25,0.60],[30,0.40],[40,0.15],[50,0.00]],
     },
     "gmp_confirmation": {
         "gmp_pct": [[-10,0.00],[0,0.20],[5,0.35],[10,0.50],[20,0.70],[30,0.85],[40,0.95],[50,1.00]],
@@ -42,6 +51,21 @@ def interpolate(points, value):
             ratio = (value - x1) / (x2 - x1)
             return y1 + ratio * (y2 - y1)
     raise ValueError(value)
+
+
+def score_business(company_age_years=None, latest_revenue_cr=None, profitable_period_ratio=None):
+    r = RULES["business_quality"]
+    vals = []
+    if company_age_years is not None:
+        vals.append((0.35, interpolate(r["company_age_years"], company_age_years)))
+    if latest_revenue_cr is not None:
+        vals.append((0.35, interpolate(r["latest_revenue_cr"], latest_revenue_cr)))
+    if profitable_period_ratio is not None:
+        vals.append((0.30, interpolate(r["profitable_period_ratio"], profitable_period_ratio)))
+    if len(vals) < 2:
+        return None
+    weight_sum = sum(w for w, _ in vals)
+    return round(sum(w * v for w, v in vals) / weight_sum, 4)
 
 
 def score_financial(roe=None, roce=None, debt_equity=None):
@@ -90,6 +114,15 @@ def score_analyst(subscribe_count=None, analyst_count=None):
     subscribe_ratio = max(0.0, min(1.0, float(subscribe_count) / float(analyst_count)))
     depth = interpolate(RULES["analyst_consensus"]["coverage_depth"], analyst_count)
     return round(0.8 * subscribe_ratio + 0.2 * depth, 4)
+
+
+def score_environment(nifty_20d_return_pct=None, nifty_20d_vol_pct=None):
+    if nifty_20d_return_pct is None or nifty_20d_vol_pct is None:
+        return None
+    r = RULES["sector_ipo_environment"]
+    momentum = interpolate(r["nifty_20d_return_pct"], nifty_20d_return_pct)
+    volatility = interpolate(r["nifty_20d_vol_pct"], nifty_20d_vol_pct)
+    return round(0.7 * momentum + 0.3 * volatility, 4)
 
 
 def score_gmp(gmp_pct=None):
