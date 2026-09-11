@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "grades": {
+    "A++": {"min_score": 95, "action": "STRONG_SUBSCRIBE"},
+    "A+": {"min_score": 90, "action": "SUBSCRIBE"},
+    "A": {"min_score": 85, "action": "TRACK"},
+    "REJECT": {"max_score": 84.99, "action": "REJECT"},
+    "NV": {"action": "NOT_VERIFIED"}
+  },
+  "actionable_grades": ["A++", "A+"],
+  "missed_opportunity_threshold_pct": 20,
+  "canonical_efficacy_checkpoint": "T2_FINAL_DAY",
+  "critical_missing_evidence_blocks_high_conviction": true,
+  "historical_checkpoints_append_only": true,
+  "listing_outcome_may_not_modify_prelisting_grade": true,
+  "automatic_weight_changes_prohibited": true
+}
