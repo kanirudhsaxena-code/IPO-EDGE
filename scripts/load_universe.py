@@ -24,12 +24,12 @@ def main():
                     "price_band_high": None,
                     "issue_price": row.get("issue_price"),
                     "issue_size": None,
-                    "status": "BACKTEST_DISCOVERED",
+                    "status": "DISCOVERED",
                 })
             finish_run(conn, run_id, status="COMPLETED", discovered_count=len(rows))
             conn.commit()
             print(f"loaded_ipos={len(rows)}")
-        except Exception as exc:
+        except Exception:
             conn.rollback()
             raise
 
