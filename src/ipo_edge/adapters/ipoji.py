@@ -32,6 +32,21 @@ def _parse_date(value: str) -> date | None:
     return None
 
 
+def _series_from_row(soup: BeautifulSoup, label: str) -> list[float]:
+    target = label.lower()
+    for row in soup.select("tr"):
+        cells = [c.get_text(" ", strip=True) for c in row.select("th,td")]
+        if not cells or target not in cells[0].lower():
+            continue
+        vals = []
+        for c in cells[1:]:
+            m = re.search(r"-?\d+(?:,\d{3})*(?:\.\d+)?", c)
+            if m:
+                vals.append(float(m.group(0).replace(",", "")))
+        return vals
+    return []
+
+
 def discover_detail_url(company_name: str, timeout: int = 20) -> str | None:
     r = requests.get(LIST_URL, headers=UA, timeout=timeout)
     r.raise_for_status()
@@ -51,10 +66,6 @@ def discover_detail_url(company_name: str, timeout: int = 20) -> str | None:
 
 
 def _historical_gmp(soup: BeautifulSoup, cutoff: date | None) -> tuple[float | None, str | None]:
-    """Return only a GMP observation whose displayed date is on/before cutoff.
-
-    Never falls back to the page's current/latest GMP during a historical run.
-    """
     if cutoff is None:
         return None, None
     candidates: list[tuple[date, float]] = []
@@ -62,7 +73,8 @@ def _historical_gmp(soup: BeautifulSoup, cutoff: date | None) -> tuple[float | N
         cells = [c.get_text(" ", strip=True) for c in row.select("th,td")]
         if len(cells) < 2:
             continue
-        row_date = next((_parse_date(c) for c in cells if _parse_date(c)), None)
+        parsed_dates = [_parse_date(c) for c in cells]
+        row_date = next((d for d in parsed_dates if d), None)
         if not row_date or row_date > cutoff:
             continue
         joined = " | ".join(cells)
@@ -85,6 +97,22 @@ def fetch_detail(company_name: str, timeout: int = 20, evidence_cutoff: date | N
     text = soup.get_text(" ", strip=True)
     gmp_pct, gmp_observed_date = _historical_gmp(soup, evidence_cutoff)
 
+    incorporation_year = None
+    m = re.search(r"incorporated\s+(?:in|on)\s+(?:[A-Za-z]+\s+)?(19\d{2}|20\d{2})", text, flags=re.I)
+    if m:
+        incorporation_year = int(m.group(1))
+
+    revenue_history = _series_from_row(soup, "Revenue")
+    pat_history = _series_from_row(soup, "Profit After Tax")
+    latest_revenue_cr = revenue_history[0] if revenue_history else None
+    profitable_ratio = None
+    if pat_history:
+        profitable_ratio = sum(1 for v in pat_history if v > 0) / len(pat_history)
+
+    company_age_years = None
+    if incorporation_year and evidence_cutoff:
+        company_age_years = max(0, evidence_cutoff.year - incorporation_year)
+
     return {
         "company_name": company_name,
         "source_url": url,
@@ -98,6 +126,12 @@ def fetch_detail(company_name: str, timeout: int = 20, evidence_cutoff: date | N
         "roce_pct": _num(r"ROCE[^0-9]*(\d+(?:\.\d+)?)%", text),
         "debt_equity": _num(r"Debt / Equity[^0-9]*(\d+(?:\.\d+)?)", text),
         "ronw_pct": _num(r"RoNW[^0-9]*(\d+(?:\.\d+)?)%", text),
+        "incorporation_year": incorporation_year,
+        "company_age_years": company_age_years,
+        "latest_revenue_cr": latest_revenue_cr,
+        "revenue_history_cr": revenue_history,
+        "pat_history_cr": pat_history,
+        "profitable_period_ratio": round(profitable_ratio, 4) if profitable_ratio is not None else None,
         "gmp_pct": gmp_pct,
         "gmp_observed_date": gmp_observed_date,
         "evidence_cutoff": evidence_cutoff.isoformat() if evidence_cutoff else None,
