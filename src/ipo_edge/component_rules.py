@@ -1,13 +1,33 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-RULES_PATH = Path(__file__).resolve().parents[2] / "config" / "component_rules_v1.0.json"
+RULES = {
+    "financial_quality": {
+        "roe_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
+        "roce_pct": [[0,0.20],[10,0.40],[15,0.60],[20,0.75],[25,0.90],[30,1.00]],
+        "debt_equity": [[0,1.00],[0.25,0.90],[0.50,0.75],[1.00,0.55],[1.50,0.35],[2.00,0.20]],
+    },
+    "valuation": {
+        "pe_post": [[10,0.95],[15,0.90],[20,0.80],[25,0.70],[35,0.55],[50,0.35],[75,0.20]],
+    },
+    "institutional_conviction": {
+        "qib_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+    },
+    "market_demand": {
+        "total_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+        "nii_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+        "retail_x": [[0,0.10],[1,0.25],[3,0.40],[10,0.60],[25,0.75],[50,0.85],[100,0.95],[200,1.00]],
+    },
+    "analyst_consensus": {
+        "coverage_depth": [[0,0.00],[1,0.55],[3,0.70],[5,0.80],[10,0.90],[15,1.00]],
+    },
+    "gmp_confirmation": {
+        "gmp_pct": [[-10,0.00],[0,0.20],[5,0.35],[10,0.50],[20,0.70],[30,0.85],[40,0.95],[50,1.00]],
+    },
+}
 
 
 def load_rules():
-    return json.loads(RULES_PATH.read_text())
+    return RULES
 
 
 def interpolate(points, value):
@@ -25,7 +45,7 @@ def interpolate(points, value):
 
 
 def score_financial(roe=None, roce=None, debt_equity=None):
-    r = load_rules()["financial_quality"]
+    r = RULES["financial_quality"]
     vals = []
     if roe is not None:
         vals.append(interpolate(r["roe_pct"], roe))
@@ -41,13 +61,13 @@ def score_valuation(pe_post=None, peer_relative_score=None):
         return max(0.0, min(1.0, float(peer_relative_score)))
     if pe_post is None:
         return None
-    return round(interpolate(load_rules()["valuation"]["pe_post"], pe_post), 4)
+    return round(interpolate(RULES["valuation"]["pe_post"], pe_post), 4)
 
 
 def score_institutional(qib_x=None, anchor_quality=None):
     if qib_x is None:
         return None
-    q = interpolate(load_rules()["institutional_conviction"]["qib_x"], qib_x)
+    q = interpolate(RULES["institutional_conviction"]["qib_x"], qib_x)
     if anchor_quality is None:
         return round(q, 4)
     a = max(0.0, min(1.0, float(anchor_quality)))
@@ -57,7 +77,7 @@ def score_institutional(qib_x=None, anchor_quality=None):
 def score_demand(total_x=None, nii_x=None, retail_x=None):
     if total_x is None or nii_x is None or retail_x is None:
         return None
-    r = load_rules()["market_demand"]
+    r = RULES["market_demand"]
     total = interpolate(r["total_x"], total_x)
     nii = interpolate(r["nii_x"], nii_x)
     retail = interpolate(r["retail_x"], retail_x)
@@ -68,11 +88,11 @@ def score_analyst(subscribe_count=None, analyst_count=None):
     if not analyst_count or subscribe_count is None:
         return None
     subscribe_ratio = max(0.0, min(1.0, float(subscribe_count) / float(analyst_count)))
-    depth = interpolate(load_rules()["analyst_consensus"]["coverage_depth"], analyst_count)
+    depth = interpolate(RULES["analyst_consensus"]["coverage_depth"], analyst_count)
     return round(0.8 * subscribe_ratio + 0.2 * depth, 4)
 
 
 def score_gmp(gmp_pct=None):
     if gmp_pct is None:
         return None
-    return round(interpolate(load_rules()["gmp_confirmation"]["gmp_pct"], gmp_pct), 4)
+    return round(interpolate(RULES["gmp_confirmation"]["gmp_pct"], gmp_pct), 4)
