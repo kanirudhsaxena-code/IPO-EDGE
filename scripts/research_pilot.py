@@ -64,10 +64,12 @@ def main():
             ),
             "gmp_confirmation": score_gmp(ipoji.get("gmp_pct")),
         }
-        critical_verified = all(
+        critical_components_present = all(
             scores.get(k) is not None
             for k in ("financial_quality", "valuation", "institutional_conviction", "market_demand")
         )
+        r4_verified = bool(ipoji.get("r4_document_verified"))
+        critical_verified = critical_components_present and r4_verified
         scored = calculate_score(scores, critical_evidence_verified=critical_verified)
 
         results.append({
@@ -83,6 +85,13 @@ def main():
             "analyst": analyst,
             "environment": environment,
             "derived_scores": scores,
+            "critical_gate": {
+                "r2_financial": scores.get("financial_quality") is not None,
+                "r3_valuation": scores.get("valuation") is not None,
+                "r4_promoter_issue_document": r4_verified,
+                "r6_institutional": scores.get("institutional_conviction") is not None,
+                "r7_demand": scores.get("market_demand") is not None,
+            },
             "score_result": {
                 "score": scored.score,
                 "grade": scored.grade,
