@@ -1,0 +1,15 @@
+[project]
+name = "ipo-edge"
+version = "0.1.0"
+description = "Autonomous Indian IPO research, scoring, backtesting and efficacy engine"
+requires-python = ">=3.11"
+dependencies = [
+  "psycopg[binary]>=3.2",
+  "requests>=2.32",
+  "beautifulsoup4>=4.12",
+  "python-dateutil>=2.9"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
