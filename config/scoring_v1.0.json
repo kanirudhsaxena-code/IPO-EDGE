@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "total_points": 100,
+  "weights": {
+    "business_quality": 15,
+    "financial_quality": 15,
+    "valuation": 20,
+    "institutional_conviction": 20,
+    "market_demand": 10,
+    "analyst_consensus": 10,
+    "sector_ipo_environment": 5,
+    "gmp_confirmation": 5
+  }
+}
