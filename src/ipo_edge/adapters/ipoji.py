@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from difflib import SequenceMatcher
+from functools import lru_cache
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -64,18 +65,23 @@ def _official_document_url(soup: BeautifulSoup) -> str | None:
     return min(candidates)[1] if candidates else None
 
 
-def discover_detail_url(company_name: str, timeout: int = 20) -> str | None:
+@lru_cache(maxsize=4)
+def _list_candidates(timeout: int = 20) -> tuple[tuple[str, str], ...]:
     r = requests.get(LIST_URL, headers=UA, timeout=timeout)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
-    target = _norm(company_name)
     candidates = []
     for a in soup.select('a[href*="/ipo/"]'):
         label = _norm(a.get_text(" ", strip=True))
         href = a.get("href")
-        if not label or not href:
-            continue
-        candidates.append((SequenceMatcher(None, target, label).ratio(), urljoin(BASE, href)))
+        if label and href:
+            candidates.append((label, urljoin(BASE, href)))
+    return tuple(candidates)
+
+
+def discover_detail_url(company_name: str, timeout: int = 20) -> str | None:
+    target = _norm(company_name)
+    candidates = [(SequenceMatcher(None, target, label).ratio(), url) for label, url in _list_candidates(timeout)]
     if not candidates:
         return None
     score, url = max(candidates)
