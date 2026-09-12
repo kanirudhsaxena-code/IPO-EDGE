@@ -1,0 +1,28 @@
+name: IPO EDGE V1.1 Live
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ipo-edge-live-v11
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ipo-edge-live
+    env:
+      DATABASE_URL: ${{ secrets.IPO_EDGE_RUNTIME_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install .
+      - run: python scripts/run_live.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipo-edge-live-report
+          path: artifacts/
+          retention-days: 30
