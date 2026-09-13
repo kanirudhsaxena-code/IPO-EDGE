@@ -51,13 +51,8 @@ def decide(bundle, now):
     if bundle.get('research_complete') and set(e['block'] for e in evidence) != {f'R{i}' for i in range(1,9)}:
         raise ValueError('A complete research review must cover R1 through R8')
     if bundle.get('research_complete') and not complete:
-        hosts = set()
-        for a in bundle.get('attempts',[]):
-            host = (urlparse(a.get('source_url','')).hostname or '').removeprefix('www.')
-            for root in ('nseindia.com','bseindia.com','sebi.gov.in'):
-                if host.endswith('.'+root): host=root
-            if host: hosts.add(host)
-        if len(hosts)<2: raise ValueError('Two independent source attempts required before final NV')
+        from .source_orchestration import validate_recovery
+        validate_recovery(bundle, now)
     result = calculate_score(scores, critical_evidence_verified=complete, hard_blocker=bundle.get('hard_blocker'))
     overlay = institutional_demand_lane(scores, critical_evidence_verified=complete, hard_blocker=bundle.get('hard_blocker'))
     # Candidate status does not promote an A/REJECT grade into a Subscribe recommendation.
