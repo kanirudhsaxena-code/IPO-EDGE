@@ -86,6 +86,9 @@ def run(conn, provider, config, now=None):
     run_id = None
     try:
         baseline = history(conn)
+        execution=getattr(provider,'execution_config',None)
+        if execution and (baseline['count']!=execution['historical_count'] or baseline['fingerprint']!=execution['historical_fingerprint']):
+            raise RuntimeError('Locked historical baseline mismatch before writes')
         row = conn.execute("SELECT * FROM framework_versions WHERE version='1.1'").fetchone()
         if not row: raise RuntimeError('V1.1 not registered')
         validate_release(row,config)
