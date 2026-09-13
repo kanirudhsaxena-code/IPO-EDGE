@@ -125,3 +125,11 @@ def test_block_recovery_audit_survives_failure():
     candidate=dict(source_url=URL,provenance_group='BSE',independence_basis='Original exchange')
     r=recover_block(c,'R6',[candidate],lambda *a:None,NOW)
     assert r['status']=='CRITICAL_EVIDENCE_NV' and r['attempts'][0]['block']=='R6'
+
+
+def test_full_september_month_and_unrelated_tables():
+    from ipo_edge.live_sources import parse_named_calendar,parse_date
+    html='<table><tr><th>Company IPO</th><th>Opening date</th><th>Closing Date</th><th>Type of IPO</th></tr><tr><td>Test</td><td>September 16, 2026</td><td>September 18, 2026</td><td>SME</td></tr></table>'
+    rows=parse_named_calendar(html,'https://ipowatch.in/ipo-calendar-september-2026/')
+    assert len(rows)==1 and rows[0]['issue_close_date'].isoformat()=='2026-09-18'
+    assert parse_date('18 September 2026').isoformat()=='2026-09-18'
