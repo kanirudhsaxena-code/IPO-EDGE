@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from urllib.parse import urlparse
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 from .scoring import calculate_score, WEIGHTS
@@ -49,13 +50,28 @@ def decide(bundle, now):
     complete = all(coverage.values())
     if bundle.get('research_complete') and set(e['block'] for e in evidence) != {f'R{i}' for i in range(1,9)}:
         raise ValueError('A complete research review must cover R1 through R8')
+    if bundle.get('research_complete') and not complete:
+        hosts = set()
+        for a in bundle.get('attempts',[]):
+            host = (urlparse(a.get('source_url','')).hostname or '').removeprefix('www.')
+            for root in ('nseindia.com','bseindia.com','sebi.gov.in'):
+                if host.endswith('.'+root): host=root
+            if host: hosts.add(host)
+        if len(hosts)<2: raise ValueError('Two independent source attempts required before final NV')
     result = calculate_score(scores, critical_evidence_verified=complete, hard_blocker=bundle.get('hard_blocker'))
     overlay = institutional_demand_lane(scores, critical_evidence_verified=complete, hard_blocker=bundle.get('hard_blocker'))
     # Candidate status does not promote an A/REJECT grade into a Subscribe recommendation.
+    estimates = bundle.get('estimates')
+    if estimates:
+        gains=[estimates[k] for k in ('bear','base','bull')]
+        if not all(isinstance(x,(int,float)) and math.isfinite(x) for x in gains) or gains!=sorted(gains):
+            raise ValueError('Invalid forecast scenarios')
+        if not estimates.get('method') or not estimates.get('source_urls') or not 0<=estimates.get('confidence',-1)<=1:
+            raise ValueError('Forecast needs evidence, method and confidence')
     return {'score': result.score, 'grade': result.grade, 'decision': result.decision,
             'hard_blocker': result.hard_blocker, 'coverage': coverage,
             'candidate': overlay.actionable_candidate, 'overlay_reason': overlay.reason,
-            'scores': scores, 'estimates': None}
+            'scores': scores, 'estimates': estimates}
 
 def validate_release(row, config):
     rules = row.get('rules_config', {})
