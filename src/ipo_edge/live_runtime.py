@@ -95,6 +95,10 @@ def run(conn, provider, config, now=None):
         errors = []
         research_results=[]; expected_keys=[]
         discovered, attempts, complete = provider.discover(now)
+        known=conn.execute("SELECT company_name FROM ipos WHERE issue_close_date>=%s AND issue_open_date<=%s AND status NOT IN ('WITHDRAWN','CANCELLED')",(now.astimezone(IST).date(),now.astimezone(IST).date())).fetchall()
+        missing_known={identity(r['company_name']) for r in known}-{identity(r['company_name']) for r in discovered}
+        if missing_known:
+            complete=False; errors.append('KNOWN_ACTIVE_IPOS_OMITTED:'+','.join(sorted(missing_known)))
         receipt(conn,'discovery:'+str(run_id),'DISCOVERY',run_id,{'attempts':attempts,'coverage_verified':complete,'count':len(discovered),'reconciliation':getattr(provider,'discovery_report',{})})
         conn.commit()
         if not complete: errors.append('UNIVERSE_COMPLETENESS_NOT_VERIFIED')
