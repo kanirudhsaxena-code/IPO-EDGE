@@ -8,7 +8,7 @@ from ipo_edge.scoring import WEIGHTS
 
 NOW=datetime(2026,9,14,14,0,tzinfo=timezone.utc)
 def bundle():
-    return {'research_complete':True,'scores':{k:1.0 for k in WEIGHTS},'evidence':[
+    return {'research_complete':True,'attempts':[{'source_url':'https://www.nseindia.com'},{'source_url':'https://www.bseindia.com'}],'scores':{k:1.0 for k in WEIGHTS},'evidence':[
         {'block':f'R{i}','source_url':'https://www.nseindia.com/test','retrieved_at':NOW.isoformat(),'verified':True} for i in range(1,9)]}
 
 def test_no_retrospective_t2():
