@@ -53,6 +53,8 @@ PUBLICATIONS = (
 
 def publication_for_url(url):
     from urllib.parse import urlparse
+    exact=next((p for p in PUBLICATIONS if p.url==url),None)
+    if exact: return exact
     host = (urlparse(url).hostname or '').lower()
     for source in PUBLICATIONS:
         root = (urlparse(source.url).hostname or '').removeprefix('www.')
