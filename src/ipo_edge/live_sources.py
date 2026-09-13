@@ -165,7 +165,7 @@ class PublicWeb:
         text = BeautifulSoup(html,'html.parser').get_text(' ',strip=True)
         price = number(r'(?:List|Listing) price\s*₹?\s*([\d,.]+)',text)
         d = re.search(r'Listing date\s*(\d{1,2} [A-Za-z]+ 20\d{2})',text,re.I)
-        issue = number(r'(?:Issue Price|Offer Price)\s*₹?\s*([\d,.]+)(?!\s*[–-])',text)
+        issue = number(r'(?:Issue Price|Offer Price)\s*₹?\s*([\d,]+(?:\.\d+)?)(?![\d,.]|\s*[–-])',text)
         # Only exact issue prices, not a price-band endpoint guessed before listing.
         expected = ipo.get('discovery_issue_price')
         if not price or not d or not issue or not expected or not ipo.get('discovery_listing_price'): return None
