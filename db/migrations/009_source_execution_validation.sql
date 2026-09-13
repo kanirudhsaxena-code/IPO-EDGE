@@ -213,6 +213,9 @@ BEGIN
           OR x->>'issue_close_date' IS DISTINCT FROM row->>'issue_close_date')) THEN valid:=false; END IF;
     END LOOP;
   END LOOP;
+  IF EXISTS(SELECT 1 FROM public.ipos i WHERE i.issue_open_date<=day::date AND i.issue_close_date>=day::date
+    AND i.status NOT IN ('WITHDRAWN','CANCELLED') AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(audit->'checks') c
+      WHERE c->>'company_name'=i.company_name AND c->>'checks_run'='true' AND c->>'recovery_complete'='true')) THEN valid:=false; END IF;
   verdict:=CASE WHEN valid THEN 'COMPLETED' ELSE 'PARTIAL' END;
   INSERT INTO public.runtime_receipts(event_key,kind,run_id,payload) VALUES('cycle-final:'||p_run,'VALIDATION',p_run,
     audit||jsonb_build_object('status',verdict,'history_after',history_now));
