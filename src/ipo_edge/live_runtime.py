@@ -116,7 +116,7 @@ def run(conn, provider, config, now=None):
                     if checkpoint_type:
                         # Research agent receipts supplement deterministic extraction using actual cited review.
                         agent = conn.execute("""SELECT payload FROM runtime_receipts WHERE kind='RESEARCH' AND ipo_id=%s
-                         AND payload->>'provider'='research_agent' AND created_at<=%s AND created_at>=%s::date
+                         AND payload->>'provider'='research_agent' AND created_at<=%s AND (created_at AT TIME ZONE 'Asia/Kolkata')::date=%s
                          ORDER BY created_at DESC LIMIT 1""",(ipo_id,now,now.astimezone(IST).date())).fetchone()
                         bundle = agent['payload']['bundle'] if agent else provider.research(item,datetime.now(timezone.utc))
                         decision_time = datetime.now(timezone.utc)
@@ -127,6 +127,9 @@ def run(conn, provider, config, now=None):
                         decision = decide(bundle,decision_time)
                         researched += 1
                         receipt(conn,f'research:{run_id}:{ipo_id}','RESEARCH',run_id,{'provider':'runtime','bundle':bundle},ipo_id)
+                        if checkpoint_type=='T2_FINAL_DAY' and not bundle.get('subscription_is_final'):
+                            errors.append(f'FINAL_SUBSCRIPTION_NOT_VERIFIED:{ipo_id}')
+                            continue
                         if not bundle.get('research_complete'):
                             errors.append(f'RESEARCH_REVIEW_PENDING:{ipo_id}')
                             # Never freeze a final-day grade using just numeric scraping.
@@ -141,9 +144,10 @@ def run(conn, provider, config, now=None):
                                   'evidence_delta_summary':{**decision,'evidence_fingerprint':fingerprint,'previous_grade':previous[-1]['grade'] if previous else None,
                                    'unresolved':bundle.get('unresolved',[]),'provider':bundle.get('provider_status')}}
                             # Existing helper returns a tuple; this runtime uses a dict-row cursor.
-                            cp_id = conn.execute('''INSERT INTO checkpoints(ipo_id,checkpoint_type,checkpoint_time,score,grade,decision,hard_blocker,evidence_delta_summary,framework_version)
-                             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'1.1') RETURNING checkpoint_id''',
-                             (ipo_id,cp['checkpoint_type'],cp['checkpoint_time'],cp['score'],cp['grade'],cp['decision'],cp['hard_blocker'],json.dumps(cp['evidence_delta_summary'],default=str))).fetchone()['checkpoint_id']
+                            estimates=decision.get('estimates') or {}
+                            cp_id = conn.execute('''INSERT INTO checkpoints(ipo_id,checkpoint_type,checkpoint_time,score,grade,decision,hard_blocker,evidence_delta_summary,framework_version,bear_gain_estimate,base_gain_estimate,bull_gain_estimate,confidence)
+                             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'1.1',%s,%s,%s,%s) RETURNING checkpoint_id''',
+                             (ipo_id,cp['checkpoint_type'],cp['checkpoint_time'],cp['score'],cp['grade'],cp['decision'],cp['hard_blocker'],json.dumps(cp['evidence_delta_summary'],default=str),estimates.get('bear'),estimates.get('base'),estimates.get('bull'),None if not estimates else 100*estimates['confidence'])).fetchone()['checkpoint_id']
                             for e in bundle['evidence']:
                                 if not e.get('source_url'): continue
                                 block = {'R1':'R1_BUSINESS','R2':'R2_FINANCIALS','R3':'R3_VALUATION','R4':'R4_PROMOTER_ISSUE','R5':'R5_ANALYST','R6':'R6_INSTITUTIONAL','R7':'R7_DEMAND','R8':'R8_ENVIRONMENT'}[e['block']]
