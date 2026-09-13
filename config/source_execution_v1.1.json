@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "shadow": false,
+  "attempts_per_endpoint": 2,
+  "timeout_seconds": 20,
+  "max_retry_delay_seconds": 5,
+  "max_response_bytes": 20000000,
+  "status_clarification": "coverage_independent_of_source_health",
+  "historical_count": 123,
+  "historical_fingerprint": "5df3c7fc2ce6e3556a523ddfa03d32fb"
+}
