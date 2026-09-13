@@ -71,3 +71,39 @@ def test_discovery_failure_logged(db):
         c.execute('SET ROLE ipo_edge_runtime');c.commit()
         with pytest.raises(RuntimeError): run(c,Broken(),json.loads(Path('config/framework_v1.1.json').read_text()))
         assert c.execute('SELECT status FROM run_log ORDER BY run_id DESC LIMIT 1').fetchone()['status']=='FAILED'
+
+def test_agent_intake_idempotent_and_rejects_future_evidence(db):
+    now=datetime.now(timezone.utc); today=now.astimezone(IST).date()
+    web=FixtureWeb(now); b=web.research({},now)
+    with psycopg.connect(db,row_factory=dict_row) as c:
+        c.execute('SET ROLE ipo_edge_runtime')
+        i=c.execute("INSERT INTO ipos(company_name,segment,issue_open_date,issue_close_date) VALUES('TEST AGENT','MAINBOARD',%s,%s) RETURNING ipo_id",(today,today+timedelta(days=2))).fetchone()['ipo_id'];c.commit()
+        result=c.execute('SELECT apply_ipo_edge_research(%s,%s::jsonb) AS result',(i,json.dumps(b))).fetchone()['result'];c.commit()
+        assert result['status']=='RECORDED' and result['grade']=='A++'
+        again=c.execute('SELECT apply_ipo_edge_research(%s,%s::jsonb) AS result',(i,json.dumps(b))).fetchone()['result'];c.commit()
+        assert again['status']=='UNCHANGED'
+        b['evidence'][0]['retrieved_at']=(now+timedelta(days=1)).isoformat()
+        with pytest.raises(psycopg.errors.RaiseException):
+            with c.transaction(): c.execute('SELECT apply_ipo_edge_research(%s,%s::jsonb)',(i,json.dumps(b)))
+        obs=[{'issue_price':100,'listing_price':120,'listing_date':today.isoformat(),'verified':True,'retrieved_at':now.isoformat(),'source_url':u} for u in ('https://www.nseindia.com/test','https://www.bseindia.com/test')]
+        i=c.execute("INSERT INTO ipos(company_name,segment,issue_open_date,issue_close_date) VALUES('TEST AGENT OUTCOME','MAINBOARD',%s,%s) RETURNING ipo_id",(today-timedelta(days=5),today-timedelta(days=2))).fetchone()['ipo_id'];c.commit()
+        outcome=c.execute('SELECT apply_ipo_edge_outcome(%s,%s::jsonb) AS result',(i,json.dumps(obs))).fetchone()['result'];c.commit()
+        assert outcome['status']=='RECORDED' and outcome['classification'] is None
+        assert c.execute('SELECT apply_ipo_edge_outcome(%s,%s::jsonb) AS result',(i,json.dumps(obs))).fetchone()['result']['status']=='ALREADY_RECORDED';c.commit()
+        assert c.execute('SELECT refresh_ipo_edge_metrics() AS result').fetchone()['result']['status']=='COMPLETED';c.commit()
+
+def test_learning_evaluation_cannot_adopt_or_rewrite_rejected(db):
+    with psycopg.connect(db,row_factory=dict_row) as c:
+        i=c.execute("INSERT INTO learnings(hypothesis,observed_signal,status) VALUES('TEST EVALUATION','fixture','TESTING') RETURNING learning_id").fetchone()['learning_id'];c.commit()
+        c.execute('SET ROLE ipo_edge_runtime');c.commit()
+        ev={'status':'VALIDATED','development_result':'fixture development','validation_result':'fixture validation','evidence_query':'SELECT fixture','sample_adequacy':'fixture only','unseen_validation':True}
+        r=c.execute('SELECT record_ipo_edge_learning_evaluation(%s,%s::jsonb) AS r',(i,json.dumps(ev))).fetchone()['r'];c.commit()
+        assert r['status']=='VALIDATED' and r['production_changed'] is False
+        ev['status']='ADOPTED'
+        with pytest.raises(psycopg.errors.RaiseException):
+            with c.transaction(): c.execute('SELECT record_ipo_edge_learning_evaluation(%s,%s::jsonb)',(i,json.dumps(ev)))
+        ev['status']='REJECTED'
+        c.execute('SELECT record_ipo_edge_learning_evaluation(%s,%s::jsonb)',(i,json.dumps(ev)));c.commit()
+        ev['status']='TESTING'
+        with pytest.raises(psycopg.errors.RaiseException):
+            with c.transaction(): c.execute('SELECT record_ipo_edge_learning_evaluation(%s,%s::jsonb)',(i,json.dumps(ev)))
