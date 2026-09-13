@@ -1,11 +1,7 @@
 name: Phase 6 Validation
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/phase6_outcomes.py'
-      - '.github/workflows/phase6-validation.yml'
   workflow_dispatch:
+
 jobs:
   validate:
     runs-on: ubuntu-latest

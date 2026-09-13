@@ -1,0 +1,31 @@
+name: Live runtime integration
+on:
+  push:
+    branches: [build/live-v11-runtime]
+  pull_request:
+    paths: ['src/**', 'scripts/run_live.py', 'tests/**', 'db/migrations/**', '.github/workflows/live_runtime_tests.yml']
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable_test_only
+          POSTGRES_DB: ipo_edge
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      IPO_EDGE_DISPOSABLE_TEST_DSN: postgresql://postgres:disposable_test_only@localhost:5432/ipo_edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install . pytest
+      - run: python -m pytest -q

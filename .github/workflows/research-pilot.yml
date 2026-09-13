@@ -2,14 +2,6 @@ name: April Research Pilot
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'src/ipo_edge/adapters/**'
-      - 'src/ipo_edge/component_rules.py'
-      - 'config/component_rules_v1.0.json'
-      - 'scripts/research_pilot.py'
-      - '.github/workflows/research-pilot.yml'
 
 jobs:
   research-pilot:
