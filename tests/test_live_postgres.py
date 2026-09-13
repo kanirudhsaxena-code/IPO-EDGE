@@ -122,6 +122,10 @@ def test_cycle_gate_preserves_history_and_rejects_false_empty(db):
                'source_health':'DEGRADED','attempts':[{'provenance_group':g,'retrieved_at':now.isoformat()} for g in ('NSE','BSE','SEBI')]}
         rid=c.execute("INSERT INTO run_log(run_type,framework_version) VALUES('DISCOVERY','1.1') RETURNING run_id").fetchone()['run_id'];c.commit()
         result=c.execute('SELECT finalize_ipo_edge_cycle(%s,%s::jsonb) AS result',(rid,json.dumps(audit))).fetchone()['result'];c.commit()
+        assert result['status']=='PARTIAL' and history(c)==before  # Known active ledger rows prevent false-empty success.
+        c.execute("UPDATE ipos SET status='WITHDRAWN' WHERE company_name LIKE 'TEST %' AND issue_close_date>=CURRENT_DATE");c.commit()
+        rid=c.execute("INSERT INTO run_log(run_type,framework_version) VALUES('DISCOVERY','1.1') RETURNING run_id").fetchone()['run_id'];c.commit()
+        result=c.execute('SELECT finalize_ipo_edge_cycle(%s,%s::jsonb) AS result',(rid,json.dumps(audit))).fetchone()['result'];c.commit()
         assert result['status']=='COMPLETED' and history(c)==before
         audit['observations'][1]['segments_searched']=['MAINBOARD']
         rid=c.execute("INSERT INTO run_log(run_type,framework_version) VALUES('DISCOVERY','1.1') RETURNING run_id").fetchone()['run_id'];c.commit()
