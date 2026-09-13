@@ -83,28 +83,32 @@ class PublicWeb:
             for year,month in windows:
                 url=source.url.format(month=calendar.month_name[month].lower(),year=year)
                 result=self.client.fetch(url, fallback_from=PUBLICATIONS[0].url if source.group!='BSE' or source!=PUBLICATIONS[0] else None)
-                rows=parse_calendar(result.text,url) if source.group=='IPOMARKETS' else parse_named_calendar(result.text,url)
-                soup=BeautifulSoup(result.text,'html.parser')
-                calendar_tables=[t for t in soup.select('table') if source.group=='IPOMARKETS' or (re.search('open',t.select_one('tr').get_text(),re.I) and re.search('clos',t.select_one('tr').get_text(),re.I))] 
-                candidate_count=sum(1 for t in calendar_tables for tr in t.select('tr')[1:] if len(tr.select('td'))>=4)
-                parse_complete=bool(rows) and candidate_count==len(rows)
-                if source.calendar and result.ok and not parse_complete:
-                    self.client.attempts[-1].update(final_source_status='SOURCE_FAILED',error='PARSER_COVERAGE_UNVERIFIED',success=False)
-                text=soup.get_text(' ',strip=True)
-                segments=[seg for seg in ('MAINBOARD','SME') if re.search('mainboard|main board' if seg=='MAINBOARD' else r'\bSME\b',text,re.I)]
-                # Never infer completed pagination from the mere presence of some rows.
-                page_match=re.search(r'page\s+(\d+)\s+of\s+(\d+)',text,re.I)
-                pagination_ok=bool(page_match and page_match[1]==page_match[2]=='1')
-                # Specialist month pages are static single-page calendars only when no paging controls exist.
-                if source.group in ('IPOMARKETS','IPOWATCH'):
-                    pagination_ok=not bool(BeautifulSoup(result.text,'html.parser').select('[rel="next"], .pagination, [aria-label="Next"]'))
-                observations.append(dict(source_name=source.name,source_url=url,ok=result.ok,
-                    retrieved_at=datetime.now(timezone.utc).isoformat(),provenance_group=source.group,
-                    independence_basis='Separately published calendar; copied underlying observations must be excluded by research review',
-                    enumerated=bool(source.calendar and parse_complete and result.ok),pagination_complete=pagination_ok,
-                    segments_searched=segments,window_start=date(year,month,1).isoformat(),
-                    window_end=date(year,month,calendar.monthrange(year,month)[1]).isoformat(),
-                    verified_empty={},rows=rows))
+                try:
+                    rows=parse_calendar(result.text,url) if source.group=='IPOMARKETS' else parse_named_calendar(result.text,url)
+                    soup=BeautifulSoup(result.text,'html.parser')
+                    calendar_tables=[t for t in soup.select('table') if t.select_one('tr') and (source.group=='IPOMARKETS' or (re.search('open',t.select_one('tr').get_text(),re.I) and re.search('clos',t.select_one('tr').get_text(),re.I)))]
+                    candidate_count=sum(1 for t in calendar_tables for tr in t.select('tr')[1:] if len(tr.select('td'))>=4)
+                    parse_complete=bool(rows) and candidate_count==len(rows)
+                    if source.calendar and result.ok and not parse_complete:
+                        self.client.attempts[-1].update(final_source_status='SOURCE_FAILED',error='PARSER_COVERAGE_UNVERIFIED',success=False)
+                    text=soup.get_text(' ',strip=True)
+                    segments=[seg for seg in ('MAINBOARD','SME') if re.search('mainboard|main board' if seg=='MAINBOARD' else r'\bSME\b',text,re.I)]
+                    # Never infer completed pagination from the mere presence of some rows.
+                    page_match=re.search(r'page\s+(\d+)\s+of\s+(\d+)',text,re.I)
+                    pagination_ok=bool(page_match and page_match[1]==page_match[2]=='1')
+                    # Specialist month pages are static single-page calendars only when no paging controls exist.
+                    if source.group in ('IPOMARKETS','IPOWATCH'):
+                        pagination_ok=not bool(BeautifulSoup(result.text,'html.parser').select('[rel="next"], .pagination, [aria-label="Next"]'))
+                    observations.append(dict(source_name=source.name,source_url=url,ok=result.ok,
+                        retrieved_at=datetime.now(timezone.utc).isoformat(),provenance_group=source.group,
+                        independence_basis='Separately published calendar; copied underlying observations must be excluded by research review',
+                        enumerated=bool(source.calendar and parse_complete and result.ok),pagination_complete=pagination_ok,
+                        segments_searched=segments,window_start=date(year,month,1).isoformat(),
+                        window_end=date(year,month,calendar.monthrange(year,month)[1]).isoformat(),
+                        verified_empty={},rows=rows))
+                except Exception as exc:
+                    self.client.attempts[-1].update(success=False,final_source_status='SOURCE_FAILED',error='PARSE_ERROR:'+type(exc).__name__)
+                    observations.append({'source_url':url,'ok':False,'rows':[],'provenance_group':source.group})
         self.discovery_report=reconcile(observations,datetime.now(timezone.utc).astimezone(IST))
         self.discovery_report.update(observations=observations,attempts=list(self.client.attempts),source_health=self.client.health)
         return self.discovery_report['rows'],self.client.attempts,self.discovery_report['coverage_status']=='COVERAGE_COMPLETE'
