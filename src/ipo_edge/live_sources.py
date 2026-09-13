@@ -25,7 +25,7 @@ def number(pattern, text):
     return float(m.group(1).replace(',', '')) if m else None
 
 def parse_date(s):
-    s = s.replace('Sept', 'Sep')
+    s = re.sub(r'\bSept\b', 'Sep', s)
     for fmt in ('%d %b %Y','%d %B %Y','%b %d, %Y'):
         try: return datetime.strptime(s, fmt).date()
         except ValueError: pass
@@ -85,7 +85,8 @@ class PublicWeb:
                 result=self.client.fetch(url, fallback_from=PUBLICATIONS[0].url if source.group!='BSE' or source!=PUBLICATIONS[0] else None)
                 rows=parse_calendar(result.text,url) if source.group=='IPOMARKETS' else parse_named_calendar(result.text,url)
                 soup=BeautifulSoup(result.text,'html.parser')
-                candidate_count=sum(1 for tr in soup.select('table tr') if len(tr.select('td'))>=4)
+                calendar_tables=[t for t in soup.select('table') if source.group=='IPOMARKETS' or (re.search('open',t.select_one('tr').get_text(),re.I) and re.search('clos',t.select_one('tr').get_text(),re.I))] 
+                candidate_count=sum(1 for t in calendar_tables for tr in t.select('tr')[1:] if len(tr.select('td'))>=4)
                 parse_complete=bool(rows) and candidate_count==len(rows)
                 if source.calendar and result.ok and not parse_complete:
                     self.client.attempts[-1].update(final_source_status='SOURCE_FAILED',error='PARSER_COVERAGE_UNVERIFIED',success=False)
@@ -227,7 +228,7 @@ def parse_named_calendar(html, url):
                 try:
                     from dateutil.parser import parse
                     if not re.search(r'20\d{2}',v): return None
-                    return parse(v.replace('Sept','Sep'),dayfirst=True).date()
+                    return parse(re.sub(r'\bSept\b','Sep',v),dayfirst=True).date()
                 except (ValueError,OverflowError): return None
             op,cl=dt(values[opened]),dt(values[closed])
             seg='SME' if 'sme' in values[segment].lower() else 'MAINBOARD' if 'main' in values[segment].lower() else None
