@@ -9,6 +9,10 @@ import requests
 from bs4 import BeautifulSoup
 from . import component_rules as cr
 from .live_policy import IST, digest
+from .source_orchestration import SourceClient, reconcile, recover_block
+from .sources import PUBLICATIONS, publication_for_url
+import json
+from pathlib import Path
 
 UA = {'User-Agent':'Mozilla/5.0 (compatible; IPO-EDGE/1.1)'}
 OFFICIAL = ('sebi.gov.in','nseindia.com','bseindia.com')
@@ -56,36 +60,55 @@ def parse_calendar(html, url):
     return rows
 
 class PublicWeb:
-    def __init__(self):
+    def __init__(self, execution_config=None):
         self.cache = {}
+        self.execution_config = execution_config or json.loads(Path("config/source_execution_v1.1.json").read_text())
+        self.client = SourceClient(self.execution_config)
+        self.discovery_report = {}
 
     def fetch(self, url, attempts):
-        host = urlparse(url).hostname or ''
-        if urlparse(url).scheme != 'https' or not any(host == d or host.endswith('.'+d) for d in (*OFFICIAL,'ipoji.com','ipoguru.in','ipomarkets.com')):
-            raise ValueError('Source outside configured public-source allowlist')
-        if url in self.cache:
-            value, receipt = self.cache[url]
-            attempts.append(receipt)
-            return value
-        receipt = {'source_url':url, 'retrieved_at':datetime.now(timezone.utc).isoformat()}
-        try:
-            r = requests.get(url, headers=UA, timeout=20)
-            r.raise_for_status()
-            receipt['status'] = 'FETCHED'
-            if len(r.content) > 20_000_000: raise ValueError('Source exceeds size limit')
-            if r.content.startswith(b'%PDF'):
-                from pypdf import PdfReader
-                value = '\n'.join(p.extract_text() or '' for p in PdfReader(io.BytesIO(r.content)).pages)
-            else: value = r.text
-            receipt['sha256'] = digest(value)
-        except Exception as exc:
-            value = ''
-            receipt.update(status='UNAVAILABLE', error=type(exc).__name__)
-        self.cache[url] = (value, receipt)
-        attempts.append(receipt)
-        return value
+        result = self.client.fetch(url)
+        attempts.extend(result.attempts)
+        return result.text
 
     def discover(self, now):
+        if not self.execution_config.get('enabled',True): return self.discover_legacy(now)
+        observations=[]
+        day=now.astimezone(IST).date()
+        start=day.replace(day=1)-timedelta(days=1)
+        end=(day.replace(day=28)+timedelta(days=4)).replace(day=1)
+        months=sorted({(d.year,d.month) for d in (start,day,end)})
+        for source in PUBLICATIONS[:8]:
+            windows=months if '{month}' in source.url else [(day.year,day.month)]
+            for year,month in windows:
+                url=source.url.format(month=calendar.month_name[month].lower(),year=year)
+                result=self.client.fetch(url, fallback_from=PUBLICATIONS[0].url if source.group!='BSE' or source!=PUBLICATIONS[0] else None)
+                rows=parse_calendar(result.text,url) if source.group=='IPOMARKETS' else parse_named_calendar(result.text,url)
+                soup=BeautifulSoup(result.text,'html.parser')
+                candidate_count=sum(1 for tr in soup.select('table tr') if len(tr.select('td'))>=4)
+                parse_complete=bool(rows) and candidate_count==len(rows)
+                if source.calendar and result.ok and not parse_complete:
+                    self.client.attempts[-1].update(final_source_status='SOURCE_FAILED',error='PARSER_COVERAGE_UNVERIFIED',success=False)
+                text=soup.get_text(' ',strip=True)
+                segments=[seg for seg in ('MAINBOARD','SME') if re.search('mainboard|main board' if seg=='MAINBOARD' else r'\bSME\b',text,re.I)]
+                # Never infer completed pagination from the mere presence of some rows.
+                page_match=re.search(r'page\s+(\d+)\s+of\s+(\d+)',text,re.I)
+                pagination_ok=bool(page_match and page_match[1]==page_match[2]=='1')
+                # Specialist month pages are static single-page calendars only when no paging controls exist.
+                if source.group in ('IPOMARKETS','IPOWATCH'):
+                    pagination_ok=not bool(BeautifulSoup(result.text,'html.parser').select('[rel="next"], .pagination, [aria-label="Next"]'))
+                observations.append(dict(source_name=source.name,source_url=url,ok=result.ok,
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),provenance_group=source.group,
+                    independence_basis='Separately published calendar; copied underlying observations must be excluded by research review',
+                    enumerated=bool(source.calendar and parse_complete and result.ok),pagination_complete=pagination_ok,
+                    segments_searched=segments,window_start=date(year,month,1).isoformat(),
+                    window_end=date(year,month,calendar.monthrange(year,month)[1]).isoformat(),
+                    verified_empty={},rows=rows))
+        self.discovery_report=reconcile(observations,datetime.now(timezone.utc).astimezone(IST))
+        self.discovery_report.update(observations=observations,attempts=list(self.client.attempts),source_health=self.client.health)
+        return self.discovery_report['rows'],self.client.attempts,self.discovery_report['coverage_status']=='COVERAGE_COMPLETE'
+
+    def discover_legacy(self, now):
         attempts, rows = [], []
         today = now.astimezone(IST).date()
         # Previous/current/next calendar months: covers recent listings and upcoming issues.
@@ -153,6 +176,18 @@ class PublicWeb:
         evidence.append({'block':'R4','source_url':docs[0] if docs else url,
                          'retrieved_at':attempts[-1]['retrieved_at'],'verified':False,
                          'reason':'Governance, promoter and use-of-proceeds review is not established by a document link or numeric parser.'})
+        # Numeric extraction cannot clear qualitative gaps. Still execute targeted recovery
+        # and preserve evidence text references for the primary scheduled research agent.
+        for block in ('R2','R3','R4','R6','R7'):
+            if any(e['block']==block and e.get('verified') for e in evidence): continue
+            candidates=[]
+            for u in dict.fromkeys([*docs,ipo.get('detail_url'),url]):
+                source=publication_for_url(u) if u else None
+                if source:
+                    candidates.append({'source_url':u,'provenance_group':source.group,
+                        'independence_basis':'Separate publisher; factual independence requires qualitative review'})
+            recovered=recover_block(self.client,block,candidates,lambda b,t,c: None,datetime.now(timezone.utc))
+            attempts.extend(recovered['attempts'])
         return {'scores':scores,'evidence':evidence,'attempts':attempts,'conflicts':conflicts,
                 'hard_blocker':'CONFLICTING_CRITICAL_EVIDENCE' if conflicts else None,
                 'unresolved':['R1 qualitative business review','R4 governance review','R5 broker research','R8 market environment'],
@@ -172,3 +207,32 @@ class PublicWeb:
         if parse_date(d[1]) != ipo['listing_date'] or abs(price-ipo['discovery_listing_price']) > .02 or abs(issue-expected) > .02: return None
         return {'issue_price':issue,'listing_price':price,'listing_gain_percent':round((price/issue-1)*100,2),
                 'listing_date':ipo['listing_date'],'source_url':url,'crosscheck_url':ipo['discovery_url'],'attempts':attempts}
+
+
+def parse_named_calendar(html, url):
+    result=[]
+    for table in BeautifulSoup(html,'html.parser').select('table'):
+        trs=table.select('tr')
+        if not trs: continue
+        headers=[x.get_text(' ',strip=True).lower() for x in trs[0].select('th,td')]
+        def col(pattern):
+            return next((i for i,h in enumerate(headers) if re.search(pattern,h)),None)
+        name,opened,closed,segment=[col(p) for p in (r'ipo name|company|ipo$',r'open',r'clos',r'type|segment|platform')]
+        if any(x is None for x in (name,opened,closed,segment)): continue
+        for tr in trs[1:]:
+            cells=tr.select('td,th')
+            if len(cells)<=max(name,opened,closed,segment): continue
+            values=[x.get_text(' ',strip=True) for x in cells]
+            def dt(v):
+                try:
+                    from dateutil.parser import parse
+                    if not re.search(r'20\d{2}',v): return None
+                    return parse(v.replace('Sept','Sep'),dayfirst=True).date()
+                except (ValueError,OverflowError): return None
+            op,cl=dt(values[opened]),dt(values[closed])
+            seg='SME' if 'sme' in values[segment].lower() else 'MAINBOARD' if 'main' in values[segment].lower() else None
+            if not op or not cl or cl<op or not seg: continue
+            a=cells[name].find('a',href=True)
+            result.append(dict(company_name=values[name],segment=seg,issue_open_date=op,issue_close_date=cl,
+                discovery_url=url,detail_url=urljoin(url,a['href']) if a else None,price_band_low=None,price_band_high=None,listing_date=None))
+    return result
