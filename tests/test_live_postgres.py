@@ -107,3 +107,40 @@ def test_learning_evaluation_cannot_adopt_or_rewrite_rejected(db):
         ev['status']='TESTING'
         with pytest.raises(psycopg.errors.RaiseException):
             with c.transaction(): c.execute('SELECT record_ipo_edge_learning_evaluation(%s,%s::jsonb)',(i,json.dumps(ev)))
+
+def test_cycle_gate_preserves_history_and_rejects_false_empty(db):
+    now=datetime.now(timezone.utc);today=now.astimezone(IST).date().isoformat()
+    with psycopg.connect(db,row_factory=dict_row) as c:
+        before=history(c);c.commit()
+        c.execute('SET ROLE ipo_edge_runtime');c.commit()
+        def obs(group):
+            return {'source_url':'https://'+group+'.example','ok':True,'enumerated':True,'pagination_complete':True,
+                    'provenance_group':group,'independence_basis':'Independent fixture','retrieved_at':now.isoformat(),
+                    'segments_searched':['MAINBOARD','SME'],'verified_empty':{'MAINBOARD':True,'SME':True},
+                    'window_start':today,'window_end':today,'rows':[]}
+        audit={'history_before':before,'observations':[obs('one'),obs('two')],'checks':[],'conflicts':[],
+               'source_health':'DEGRADED','attempts':[{'provenance_group':g,'retrieved_at':now.isoformat()} for g in ('NSE','BSE','SEBI')]}
+        rid=c.execute("INSERT INTO run_log(run_type,framework_version) VALUES('DISCOVERY','1.1') RETURNING run_id").fetchone()['run_id'];c.commit()
+        result=c.execute('SELECT finalize_ipo_edge_cycle(%s,%s::jsonb) AS result',(rid,json.dumps(audit))).fetchone()['result'];c.commit()
+        assert result['status']=='PARTIAL' and history(c)==before  # Known active ledger rows prevent false-empty success.
+        c.execute("UPDATE ipos SET status='WITHDRAWN' WHERE company_name LIKE 'TEST %' AND issue_close_date>=CURRENT_DATE");c.commit()
+        rid=c.execute("INSERT INTO run_log(run_type,framework_version) VALUES('DISCOVERY','1.1') RETURNING run_id").fetchone()['run_id'];c.commit()
+        result=c.execute('SELECT finalize_ipo_edge_cycle(%s,%s::jsonb) AS result',(rid,json.dumps(audit))).fetchone()['result'];c.commit()
+        assert result['status']=='COMPLETED' and history(c)==before
+        audit['observations'][1]['segments_searched']=['MAINBOARD']
+        rid=c.execute("INSERT INTO run_log(run_type,framework_version) VALUES('DISCOVERY','1.1') RETURNING run_id").fetchone()['run_id'];c.commit()
+        result=c.execute('SELECT finalize_ipo_edge_cycle(%s,%s::jsonb) AS result',(rid,json.dumps(audit))).fetchone()['result'];c.commit()
+        assert result['status']=='PARTIAL' and history(c)==before
+
+def test_database_recovery_is_per_block_and_future_safe(db):
+    now=datetime.now(timezone.utc)
+    with psycopg.connect(db,row_factory=dict_row) as c:
+        c.execute('SET ROLE ipo_edge_runtime');c.commit()
+        bundle={'evidence':[],'attempts':[{'block':'R2','source_url':'https://'+g+'.example','retrieved_at':now.isoformat(),'provenance_group':g,'independence_basis':'Independent fixture','result':'Missing'} for g in ('one','two')]}
+        with pytest.raises(psycopg.errors.RaiseException,match='R3'):
+            with c.transaction():c.execute('SELECT validate_ipo_edge_recovery(%s::jsonb)',(json.dumps(bundle),))
+        bundle['attempts']=[dict(a,block=b) for b in ('R2','R3','R4','R6','R7') for a in bundle['attempts']]
+        c.execute('SELECT validate_ipo_edge_recovery(%s::jsonb)',(json.dumps(bundle),));c.commit()
+        bundle['attempts'][-1]['retrieved_at']=(now+timedelta(days=1)).isoformat()
+        with pytest.raises(psycopg.errors.RaiseException,match='R7'):
+            with c.transaction():c.execute('SELECT validate_ipo_edge_recovery(%s::jsonb)',(json.dumps(bundle),))

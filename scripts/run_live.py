@@ -12,9 +12,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', default='artifacts/ipo_edge_live.md')
     args = parser.parse_args()
+    execution=json.loads(Path('config/source_execution_v1.1.json').read_text())
+    if execution.get('shadow'):
+        from datetime import datetime,timezone
+        provider=PublicWeb(execution)
+        provider.discover(datetime.now(timezone.utc))
+        print(json.dumps(provider.discovery_report,default=str))
+        return
     config = json.loads(Path('config/framework_v1.1.json').read_text())
     with psycopg.connect(os.environ['DATABASE_URL']) as conn:
-        result = run(conn,PublicWeb(),config)
+        result = run(conn,PublicWeb(execution),config)
         if result['status']=='SKIPPED_CONCURRENT_RUN':
             print('Another IPO EDGE run is active'); return
         path = Path(args.output); path.parent.mkdir(parents=True,exist_ok=True)

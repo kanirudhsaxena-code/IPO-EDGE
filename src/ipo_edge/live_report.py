@@ -11,7 +11,7 @@ def table(headers, rows):
 def render(conn, result):
     rates = lambda x: None if x is None else f'{100*x:.1f}%'
     efficacy = [[r['version'],r['completed'],r['recommendation_count'],rates(r['positive_hit_rate']),rates(r['twenty_percent_hit_rate']),rates(r['opportunity_capture_rate']),r['forecast_error']] for r in result.get('efficacy',[])]
-    efficacy.append(['Run '+str(result.get('run_id')),result['status'],None,None,None,None,'; '.join(result.get('errors',[])) or 'Checks passed'])
+    efficacy.append(['Run '+str(result.get('run_id')),result['status'],None,None,None,None,'; '.join(result.get('errors',[])) or 'Checks passed; coverage='+str(result.get('coverage_status','UNKNOWN'))+'; sources='+str(result.get('source_health','UNKNOWN'))])
     missed = [[r['company_name'],r['framework_version'],r['grade'],str(r['listing_gain_percent'])+'%','Review pre-listing evidence'] for r in assessment_rows(conn) if r['grade'] not in ('A+','A++') and r['listing_gain_percent']>=20]
     learning = conn.execute('SELECT learning_id,hypothesis,validation_result,status,adopted_framework_version FROM learnings ORDER BY learning_id').fetchall()
     current = conn.execute("""SELECT i.company_name,i.segment,i.issue_close_date,c.grade,c.decision,c.base_gain_estimate,c.evidence_delta_summary

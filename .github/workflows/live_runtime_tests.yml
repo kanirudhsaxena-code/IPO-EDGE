@@ -1,9 +1,9 @@
 name: Live runtime integration
 on:
   push:
-    branches: [build/live-v11-runtime]
+    branches: [build/live-v11-runtime, build/source-resilience-v11]
   pull_request:
-    paths: ['src/**', 'scripts/run_live.py', 'tests/**', 'db/migrations/**', '.github/workflows/live_runtime_tests.yml']
+    paths: ['config/source_execution_v1.1.json', 'src/**', 'scripts/run_live.py', 'tests/**', 'db/migrations/**', '.github/workflows/live_runtime_tests.yml']
 permissions:
   contents: read
 jobs:

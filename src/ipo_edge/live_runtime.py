@@ -8,6 +8,7 @@ from .db import insert_checkpoint, upsert_ipo
 from .efficacy import OutcomeRecord, summarize
 from .pipeline import classify_outcome
 from .live_policy import IST, digest, decide, eligible_checkpoint, validate_release
+from .source_orchestration import validate_final, completion_gate, identity
 
 def receipt(conn, key, kind, run_id, payload, ipo_id=None):
     return conn.execute('INSERT INTO runtime_receipts(event_key,kind,ipo_id,run_id,payload) VALUES(%s,%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING RETURNING event_key',
@@ -85,6 +86,9 @@ def run(conn, provider, config, now=None):
     run_id = None
     try:
         baseline = history(conn)
+        execution=getattr(provider,'execution_config',None)
+        if execution and (baseline['count']!=execution['historical_count'] or baseline['fingerprint']!=execution['historical_fingerprint']):
+            raise RuntimeError('Locked historical baseline mismatch before writes')
         row = conn.execute("SELECT * FROM framework_versions WHERE version='1.1'").fetchone()
         if not row: raise RuntimeError('V1.1 not registered')
         validate_release(row,config)
@@ -92,8 +96,13 @@ def run(conn, provider, config, now=None):
         run_id = conn.execute("INSERT INTO run_log(run_type,framework_version) VALUES('MANUAL','1.1') RETURNING run_id").fetchone()['run_id']
         conn.commit()
         errors = []
+        research_results=[]; expected_keys=[]
         discovered, attempts, complete = provider.discover(now)
-        receipt(conn,'discovery:'+str(run_id),'DISCOVERY',run_id,{'attempts':attempts,'coverage_verified':complete,'count':len(discovered)})
+        known=conn.execute("SELECT company_name FROM ipos WHERE issue_close_date>=%s AND issue_open_date<=%s AND status NOT IN ('WITHDRAWN','CANCELLED')",(now.astimezone(IST).date(),now.astimezone(IST).date())).fetchall()
+        missing_known={identity(r['company_name']) for r in known}-{identity(r['company_name']) for r in discovered}
+        if missing_known:
+            complete=False; errors.append('KNOWN_ACTIVE_IPOS_OMITTED:'+','.join(sorted(missing_known)))
+        receipt(conn,'discovery:'+str(run_id),'DISCOVERY',run_id,{'attempts':attempts,'coverage_verified':complete,'count':len(discovered),'reconciliation':getattr(provider,'discovery_report',{})})
         conn.commit()
         if not complete: errors.append('UNIVERSE_COMPLETENESS_NOT_VERIFIED')
         checkpoint_count = researched = outcomes = 0
@@ -114,6 +123,7 @@ def run(conn, provider, config, now=None):
                     previous = conn.execute('SELECT * FROM checkpoints WHERE ipo_id=%s ORDER BY checkpoint_time,checkpoint_id',(ipo_id,)).fetchall()
                     checkpoint_type = eligible_checkpoint(item,now,previous)
                     if checkpoint_type:
+                        expected_keys.append(identity(item['company_name']))
                         # Research agent receipts supplement deterministic extraction using actual cited review.
                         agent = conn.execute("""SELECT payload FROM runtime_receipts WHERE kind='RESEARCH' AND ipo_id=%s
                          AND payload->>'provider'='research_agent' AND created_at<=%s AND (created_at AT TIME ZONE 'Asia/Kolkata')::date=%s
@@ -124,16 +134,21 @@ def run(conn, provider, config, now=None):
                         if checkpoint_type is None:
                             errors.append(f'CHECKPOINT_WINDOW_CLOSED:{ipo_id}')
                             continue
+                        # Persist evidence before validation so rejected bundles remain auditable.
+                        receipt(conn,f'research:{run_id}:{ipo_id}','RESEARCH',run_id,{'provider':'runtime','bundle':bundle},ipo_id)
                         decision = decide(bundle,decision_time)
                         researched += 1
-                        receipt(conn,f'research:{run_id}:{ipo_id}','RESEARCH',run_id,{'provider':'runtime','bundle':bundle},ipo_id)
-                        if checkpoint_type=='T2_FINAL_DAY' and not bundle.get('subscription_is_final'):
-                            errors.append(f'FINAL_SUBSCRIPTION_NOT_VERIFIED:{ipo_id}')
-                            continue
+                        if checkpoint_type=='T2_FINAL_DAY':
+                            try: validate_final(bundle,item['issue_close_date'],decision_time)
+                            except (ValueError,KeyError,TypeError) as exc:
+                                errors.append(f'FINAL_SUBSCRIPTION_NOT_VERIFIED:{ipo_id}:{exc}')
+                                receipt(conn,f'final-failure:{run_id}:{ipo_id}','RESEARCH',run_id,{'status':'CRITICAL_EVIDENCE_NV','reason':str(exc),'bundle':bundle},ipo_id)
+                                continue
                         if not bundle.get('research_complete'):
                             errors.append(f'RESEARCH_REVIEW_PENDING:{ipo_id}')
                             # Never freeze a final-day grade using just numeric scraping.
                             if checkpoint_type=='T2_FINAL_DAY': continue
+                        research_results.append({'key':identity(item['company_name']),'checks_run':bool(bundle.get('research_complete')),'recovery_complete':bool(bundle.get('research_complete')),'disposition':'CRITICAL_EVIDENCE_NV' if decision['grade']=='NV' else 'VERIFIED'})
                         fingerprint = digest({'decision':decision,'values':[e.get('values') for e in bundle['evidence']]})
                         same = previous and json.loads(previous[-1]['evidence_delta_summary'] or '{}').get('evidence_fingerprint')==fingerprint
                         if not same or checkpoint_type=='T2_FINAL_DAY':
@@ -163,19 +178,26 @@ def run(conn, provider, config, now=None):
                             receipt(conn,f'outcome:{ipo_id}','OUTCOME',run_id,outcome,ipo_id); outcomes += 1
                 conn.commit()
             except Exception as exc:
-                conn.rollback(); errors.append(f"IPO_FAILED:{item['company_name']}:{type(exc).__name__}")
+                conn.rollback()
+                receipt(conn,'issue-failure:'+str(run_id)+':'+identity(item['company_name']),'RESEARCH',run_id,{'status':'CRITICAL_EVIDENCE_NV','reason':str(exc),'attempts':list(getattr(getattr(provider,'client',None),'attempts',[]))})
+                conn.commit()
+                errors.append(f"IPO_FAILED:{item['company_name']}:{type(exc).__name__}")
         summaries, assessed = update_efficacy(conn,now)
         learn(conn,run_id,assessed)
         if history(conn) != baseline: raise RuntimeError('Historical V1.0 integrity mismatch')
         receipt(conn,'integrity:'+str(run_id),'INTEGRITY',run_id,baseline)
-        status = 'PARTIAL' if errors else 'COMPLETED'
+        report=getattr(provider,'discovery_report',{})
+        gated=completion_gate(report,research_results,expected_keys) if report else ('COMPLETED' if complete else 'PARTIAL')
+        status = 'PARTIAL' if errors or gated!='COMPLETED' else 'COMPLETED'
+        receipt(conn,'completion:'+str(run_id),'VALIDATION',run_id,{'coverage_status':report.get('coverage_status'),'source_health':report.get('source_health'),'checks':research_results,'status':status})
         conn.execute('''UPDATE run_log SET completed_at=now(),status=%s,errors=%s::jsonb,discovered_count=%s,researched_count=%s,checkpoint_count=%s,outcomes_added=%s WHERE run_id=%s''',
                      (status,json.dumps(errors),len(discovered),researched,checkpoint_count,outcomes,run_id))
         conn.commit()
-        return {'run_id':run_id,'status':status,'errors':errors,'discovered':len(discovered),'researched':researched,'checkpoints':checkpoint_count,'outcomes':outcomes,'efficacy':summaries}
+        return {'run_id':run_id,'status':status,'errors':errors,'discovered':len(discovered),'researched':researched,'checkpoints':checkpoint_count,'outcomes':outcomes,'efficacy':summaries,'source_health':report.get('source_health','UNKNOWN'),'coverage_status':report.get('coverage_status','UNKNOWN')}
     except Exception as exc:
         conn.rollback()
         if run_id:
+            receipt(conn,'failed-sources:'+str(run_id),'DISCOVERY',run_id,{'attempts':list(getattr(getattr(provider,'client',None),'attempts',[])),'status':'COVERAGE_PARTIAL'})
             conn.execute("UPDATE run_log SET status='FAILED',completed_at=now(),errors=%s::jsonb WHERE run_id=%s",(json.dumps([type(exc).__name__]),run_id)); conn.commit()
         raise
     finally:
