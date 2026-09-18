@@ -166,15 +166,18 @@ def reconcile(observations, now):
     window_start/end, retrieved_at, rows and provenance. Filings are supplemental.
     """
     day = now.date().isoformat()
-    usable=[]; conflicts=[]; union={}; provenance={}
+    usable=[]; corroborators=[]; conflicts=[]; union={}; provenance={}
     for obs in observations:
-        if not obs.get('ok'): continue
+        if not obs.get('ok') and not obs.get('issue_corroboration'): continue
         try:
             fresh = timestamp(obs['retrieved_at']).date()==now.date() and timestamp(obs['retrieved_at'])<=now
             fresh = fresh and obs['window_start']<=day<=obs['window_end']
         except (KeyError,ValueError,TypeError): fresh=False
         if not fresh: continue
-        if obs.get('enumerated') and obs.get('pagination_complete') and independent_group(obs): usable.append(obs)
+        if obs.get('enumerated') and obs.get('pagination_complete') and independent_group(obs):
+            usable.append(obs)
+        if independent_group(obs) and (obs.get('ok') or obs.get('issue_corroboration')):
+            corroborators.append(obs)
         for row in obs.get('rows',[]):
             key=_reconciliation_key(row,union)
             old=union.get(key)
@@ -189,9 +192,10 @@ def reconcile(observations, now):
             k for k,v in union.items()
             if v.get('segment')==segment and str(v.get('issue_close_date',''))>=day
         }
+        issue_scans=[o for o in corroborators if segment in o.get('segments_searched',[])]
         corroboration_groups={
             k: {
-                independent_group(o) for o in scans
+                independent_group(o) for o in issue_scans
                 if _observation_has_issue(o,union[k])
             }
             for k in expected
