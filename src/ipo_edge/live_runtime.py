@@ -48,20 +48,6 @@ def update_efficacy(conn, now):
     return summaries, rows
 
 def learn(conn, run_id, rows):
-    v11_rows=[row for row in rows if row['framework_version']=='1.1']
-    learning_status='COMPLETED' if v11_rows else 'DEFERRED'
-    conn.execute(
-        """INSERT INTO learning_runs
-           (production_model_version,scope,status,recommendation_sample_size,
-            independent_sample_size,completed_at,notes)
-           VALUES('1.1','IPO_EDGE',%s,%s,%s,now(),%s)""",
-        (
-            learning_status,
-            len(v11_rows),
-            len(v11_rows),
-            f'IPO EDGE autonomous learning governance cycle for runtime run {run_id}; automatic adoption disabled.',
-        ),
-    )
     for row in rows:
         if row['framework_version'] != '1.1': continue
         kind = classify_outcome(row['grade'],float(row['listing_gain_percent']))
