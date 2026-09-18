@@ -210,6 +210,15 @@ def parse_ipoji_segment(html):
                 return 'MAINBOARD'
             if re.fullmatch(r'SME',label,re.I):
                 return 'SME'
+    # Backward-compatible fallback for simple source documents without a
+    # structured issue heading. It remains fail-closed when both labels occur.
+    text=soup.get_text(' ',strip=True)
+    is_sme=bool(re.search(r'\bSME IPO\b|\bNSE SME\b|\bBSE SME\b|\bSME platform\b',text,re.I))
+    is_main=bool(re.search(r'\bMainboard\b',text,re.I))
+    if is_sme and not is_main:
+        return 'SME'
+    if is_main and not is_sme:
+        return 'MAINBOARD'
     return None
 
 
