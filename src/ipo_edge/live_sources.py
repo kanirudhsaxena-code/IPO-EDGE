@@ -26,7 +26,7 @@ def number(pattern, text):
 
 def parse_date(s):
     s = re.sub(r'\bSept\b', 'Sep', s)
-    for fmt in ('%d %b %Y','%d %B %Y','%b %d, %Y'):
+    for fmt in ('%d %b %Y','%d %B %Y','%b %d, %Y','%d-%b-%y','%d-%b-%Y'):
         try: return datetime.strptime(s, fmt).date()
         except ValueError: pass
     return None
