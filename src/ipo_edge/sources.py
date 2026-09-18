@@ -36,6 +36,8 @@ class Publication:
     group: str
     segments: tuple[str, ...] = ('MAINBOARD', 'SME')
     calendar: bool = False
+    sebi_registration_no: str | None = None
+    registry_url: str | None = None
 
 PUBLICATIONS = (
     Publication('BSE public issues', 'https://www.bseindia.com/markets/PublicIssues/IPOIssues_new.aspx', 'EXCHANGE', 2, 'BSE', calendar=True),
@@ -51,12 +53,31 @@ PUBLICATIONS = (
     Publication('Economic Times IPO', 'https://economictimes.indiatimes.com/markets/ipos', 'REPUTABLE_SECONDARY', 4, 'ET'),
 )
 
-def publication_for_url(url):
+def verified_registrar_publication(name, url, sebi_registration_no, registry_url):
     from urllib.parse import urlparse
-    exact=next((p for p in PUBLICATIONS if p.url==url),None)
+    import re
+    if not isinstance(name,str) or not name.strip():
+        raise ValueError('Registrar name required')
+    if not isinstance(url,str) or urlparse(url).scheme!='https':
+        raise ValueError('Registrar URL must be https')
+    if not isinstance(registry_url,str) or urlparse(registry_url).scheme!='https' or 'sebi.gov.in' not in (urlparse(registry_url).hostname or ''):
+        raise ValueError('SEBI registry URL required')
+    if not isinstance(sebi_registration_no,str) or not re.fullmatch(r'INR\d{9}',sebi_registration_no):
+        raise ValueError('Registrar SEBI registration invalid')
+    return Publication(
+        name=name.strip(), url=url, source_type='REGISTRAR', priority=3,
+        group='REGISTRAR:'+sebi_registration_no, calendar=False,
+        sebi_registration_no=sebi_registration_no, registry_url=registry_url,
+    )
+
+
+def publication_for_url(url, extra_publications=()):
+    from urllib.parse import urlparse
+    publications=tuple(PUBLICATIONS)+tuple(extra_publications or ())
+    exact=next((p for p in publications if p.url==url),None)
     if exact: return exact
     host = (urlparse(url).hostname or '').lower()
-    for source in PUBLICATIONS:
+    for source in publications:
         root = (urlparse(source.url).hostname or '').removeprefix('www.')
         if host == root or host.endswith('.'+root):
             return source
