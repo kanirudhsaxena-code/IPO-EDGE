@@ -58,6 +58,18 @@ def _reconciliation_key(row, union):
             return key
     return direct
 
+def _observation_has_issue(observation, target):
+    for row in observation.get('rows',[]):
+        same_issue=all(
+            str(target.get(field))==str(row.get(field))
+            for field in ('segment','issue_open_date','issue_close_date')
+        )
+        if same_issue and _same_company_name(
+            target.get('company_name',''), row.get('company_name','')
+        ):
+            return True
+    return False
+
 def independent_group(item):
     # Explicit lineage is required: different hosts alone do not prove independence.
     group = item.get('provenance_group')
@@ -168,7 +180,13 @@ def reconcile(observations, now):
             k for k,v in union.items()
             if v.get('segment')==segment and str(v.get('issue_close_date',''))>=day
         }
-        corroborated=all(len({independent_group(o) for o in scans if any(identity(r['company_name'])==k for r in o.get('rows',[]))})>=2 for k in expected)
+        corroborated=all(
+            len({
+                independent_group(o) for o in scans
+                if _observation_has_issue(o,union[k])
+            })>=2
+            for k in expected
+        )
         # Two enumerations may legitimately be empty only with explicit empty proof.
         empty_ok=bool(expected) or sum(bool(o.get('verified_empty',{}).get(segment)) for o in scans)>=2
         complete=len(groups)>=2 and corroborated and empty_ok and not conflicts
