@@ -48,7 +48,7 @@ PUBLICATIONS = (
     Publication('SEBI public issues', 'https://www.sebi.gov.in/filings/public-issues.html', 'OFFICIAL_REGULATORY', 1, 'SEBI'),
     Publication('IPO Markets calendar', 'https://ipomarkets.com/ipo-calendar/{month}-{year}', 'GMP_SPECIALIST', 5, 'IPOMARKETS', calendar=True),
     Publication('IPO Watch calendar', 'https://ipowatch.in/ipo-calendar-{month}-{year}/', 'GMP_SPECIALIST', 6, 'IPOWATCH', calendar=True),
-    Publication('IPOJi', 'https://www.ipoji.com/', 'GMP_SPECIALIST', 5, 'IPOJI'),
+    Publication('IPOJi calendar', 'https://www.ipoji.com/ipo-list?year={year}', 'GMP_SPECIALIST', 5, 'IPOJI', calendar=True),
     Publication('IPOGuru research', 'https://ipoguru.in/', 'BROKER_RESEARCH', 5, 'IPOGURU'),
     Publication('Economic Times IPO', 'https://economictimes.indiatimes.com/markets/ipos', 'REPUTABLE_SECONDARY', 4, 'ET'),
 )
