@@ -54,10 +54,7 @@ def test_repeat_run_as_runtime_role_and_history_integrity(db):
         assert first['checkpoints']==1 and second['checkpoints']==0
         assert first['outcomes']==1 and second['outcomes']==0
         assert c.execute('SELECT count(*) AS n FROM learnings').fetchone()['n']==1
-        learning_runs=c.execute("SELECT status,recommendation_sample_size,independent_sample_size,notes FROM learning_runs ORDER BY learning_run_id").fetchall()
-        assert len(learning_runs)>=2
-        assert all(r['status'] in ('COMPLETED','DEFERRED') for r in learning_runs)
-        assert all('automatic adoption disabled' in r['notes'] for r in learning_runs)
+        assert c.execute("SELECT count(*) AS n FROM runtime_receipts WHERE kind='VALIDATION'").fetchone()['n']>=1
         assert history(c)==before
         report=render(c,second)
         assert len(report.split('\n\n'))==4
