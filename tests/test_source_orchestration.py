@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 import requests
 from ipo_edge.source_orchestration import SourceClient,reconcile,validate_recovery,validate_final,completion_gate,recover_block
+from ipo_edge.sources import verified_registrar_publication
 
 NOW=datetime(2026,9,14,14,0,tzinfo=timezone.utc)
 URL='https://www.bseindia.com/markets/PublicIssues/IPOIssues_new.aspx'
@@ -133,3 +134,29 @@ def test_full_september_month_and_unrelated_tables():
     rows=parse_named_calendar(html,'https://ipowatch.in/ipo-calendar-september-2026/')
     assert len(rows)==1 and rows[0]['issue_close_date'].isoformat()=='2026-09-18'
     assert parse_date('18 September 2026').isoformat()=='2026-09-18'
+
+
+def test_verified_dynamic_registrar_is_read_only_registered_source():
+    registrar=verified_registrar_publication(
+        'KFin Technologies Limited',
+        'https://www.kfintech.com/',
+        'INR000000221',
+        'https://www.sebi.gov.in/sebiweb/other/OtherAction.do?doRecognisedFpi=yes&intmId=10&regNo=INR000000221',
+    )
+    calls=[]
+    def fetch(url,**kwargs):
+        calls.append((url,kwargs))
+        return response()
+    client=SourceClient({},fetch,extra_publications=[registrar])
+    result=client.fetch('https://www.kfintech.com/')
+    assert result.ok
+    assert result.attempts[0]['source_type']=='REGISTRAR'
+    assert result.attempts[0]['authority']==3
+    assert result.attempts[0]['provenance_group']=='REGISTRAR:INR000000221'
+    assert calls and calls[0][1]['allow_redirects'] is False
+
+
+def test_unverified_registrar_url_remains_blocked():
+    client=SourceClient({},lambda *a,**k:response())
+    with pytest.raises(ValueError,match='Unregistered'):
+        client.fetch('https://registrar.example/')
