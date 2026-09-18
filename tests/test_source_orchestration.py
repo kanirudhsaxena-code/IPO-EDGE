@@ -160,3 +160,51 @@ def test_unverified_registrar_url_remains_blocked():
     client=SourceClient({},lambda *a,**k:response())
     with pytest.raises(ValueError,match='Unregistered'):
         client.fetch('https://registrar.example/')
+
+
+def test_parser_completeness_counts_only_named_ipo_calendar_rows():
+    from ipo_edge.live_sources import named_calendar_candidate_count, parse_named_calendar
+    html = """
+    <table><tr><th>Noise</th></tr><tr><td>Unrelated</td></tr></table>
+    <table>
+      <tr><th>Company IPO</th><th>Opening date</th><th>Closing Date</th><th>Type of IPO</th></tr>
+      <tr><td>Alpha Limited</td><td>September 18, 2026</td><td>September 21, 2026</td><td>Mainboard</td></tr>
+    </table>
+    """
+    rows=parse_named_calendar(html,'https://ipowatch.in/ipo-calendar-september-2026/')
+    assert len(rows)==1
+    assert named_calendar_candidate_count(html)==1
+
+
+def test_reconciliation_aliases_same_issue_without_merging_unrelated_names():
+    a=observation('ONE',[dict(company_name='National Stock Exchange of India Limited',segment='MAINBOARD',
+        issue_open_date='2026-09-17',issue_close_date='2026-09-21')],('MAINBOARD',))
+    b=observation('TWO',[dict(company_name='NSE',segment='MAINBOARD',
+        issue_open_date='2026-09-17',issue_close_date='2026-09-21')],('MAINBOARD',))
+    # SME must also be independently verified empty for the global gate.
+    a['verified_empty']['SME']=True; b['verified_empty']['SME']=True
+    a['segments_searched']=['MAINBOARD','SME']; b['segments_searched']=['MAINBOARD','SME']
+    result=reconcile([a,b],NOW)
+    assert result['segments']['MAINBOARD']['status']=='COVERAGE_COMPLETE'
+    assert result['segments']['MAINBOARD']['ipo_count']==1
+
+
+def test_closed_rows_do_not_block_current_discovery_coverage():
+    closed=dict(company_name='Old Fixture',segment='MAINBOARD',
+        issue_open_date='2026-09-01',issue_close_date='2026-09-03')
+    active=row('MAINBOARD')
+    a=observation('ONE',[closed,active],('MAINBOARD','SME'))
+    b=observation('TWO',[active],('MAINBOARD','SME'))
+    result=reconcile([a,b],NOW)
+    assert result['segments']['MAINBOARD']['status']=='COVERAGE_COMPLETE'
+    assert result['segments']['MAINBOARD']['coverage_scope']=='ACTIVE_OR_UPCOMING'
+    assert result['segments']['MAINBOARD']['ipo_count']==1
+
+
+def test_similar_names_on_different_issue_dates_remain_distinct():
+    a=observation('ONE',[dict(company_name='Alpha India',segment='MAINBOARD',
+        issue_open_date='2026-09-12',issue_close_date='2026-09-14')])
+    b=observation('TWO',[dict(company_name='Alpha',segment='MAINBOARD',
+        issue_open_date='2026-09-13',issue_close_date='2026-09-15')])
+    result=reconcile([a,b],NOW)
+    assert result['segments']['MAINBOARD']['status']=='COVERAGE_PARTIAL'
