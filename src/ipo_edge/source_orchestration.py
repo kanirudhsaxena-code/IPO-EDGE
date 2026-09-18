@@ -178,12 +178,19 @@ def reconcile(observations, now):
             usable.append(obs)
         if independent_group(obs) and (obs.get('ok') or obs.get('issue_corroboration')):
             corroborators.append(obs)
+
+    # Only independently complete enumerators may define/expand the canonical
+    # universe. Partial/detail/broker sources can corroborate an existing issue
+    # but cannot inject a new single-source IPO into the candidate set.
+    for obs in usable:
         for row in obs.get('rows',[]):
             key=_reconciliation_key(row,union)
             old=union.get(key)
             if old and any(str(old.get(k))!=str(row.get(k)) for k in ('segment','issue_open_date','issue_close_date')):
                 conflicts.append({'company':key,'status':'SOURCE_CONFLICT','reason':'IDENTITY_OR_DATE_CONFLICT','sources':[provenance[key],obs.get('source_url')]})
-            else: union[key]=row; provenance[key]=obs.get('source_url')
+            else:
+                union[key]=row
+                provenance[key]=obs.get('source_url')
     status={}
     for segment in SEGMENTS:
         scans=[o for o in usable if segment in o.get('segments_searched',[])]
