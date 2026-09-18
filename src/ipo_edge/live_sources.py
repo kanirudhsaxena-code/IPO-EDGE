@@ -308,6 +308,7 @@ class PublicWeb:
                     window_start=date(day.year,1,1).isoformat(),window_end=date(day.year,12,31).isoformat(),
                     verified_empty=verified_empty,rows=resolved,
                     unresolved=unresolved,
+                    issue_corroboration=bool(resolved),
                 ))
             except Exception as exc:
                 if 0<=index_attempt<len(self.client.attempts):
