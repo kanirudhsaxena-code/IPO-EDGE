@@ -51,6 +51,7 @@ PUBLICATIONS = (
     Publication('IPOJi calendar', 'https://www.ipoji.com/ipo-list?year={year}', 'GMP_SPECIALIST', 5, 'IPOJI', calendar=True),
     Publication('Muthoot Securities forthcoming issues', 'https://www.muthootsecurities.com/IPO/Forthcoming-Issues', 'BROKER_RESEARCH', 4, 'CMOTS_BROKER_FEED', calendar=True),
     Publication('IPOBarta calendar', 'https://ipobarta.ai/ipo/calendar', 'REPUTABLE_SECONDARY', 5, 'IPOBARTA', calendar=True),
+    Publication('IIFL Capital upcoming IPOs', 'https://www.indiainfoline.com/ipo/upcoming-ipo', 'BROKER_RESEARCH', 4, 'IIFL_CAPITAL', calendar=True),
     Publication('IPOGuru research', 'https://ipoguru.in/', 'BROKER_RESEARCH', 5, 'IPOGURU'),
     Publication('Economic Times IPO', 'https://economictimes.indiatimes.com/markets/ipos', 'REPUTABLE_SECONDARY', 4, 'ET'),
 )
