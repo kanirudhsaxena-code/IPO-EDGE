@@ -299,3 +299,34 @@ def test_partial_detail_source_cannot_replace_second_complete_enumerator():
     partial_detail.update(ok=False,enumerated=False,issue_corroboration=True,verified_empty={})
     result=reconcile([complete_one,partial_detail],NOW)
     assert result['segments']['MAINBOARD']['status']=='COVERAGE_PARTIAL'
+
+
+def test_ipoji_segment_ignores_global_navigation_labels():
+    from ipo_edge.live_sources import parse_ipoji_segment
+    main='''<nav>Mainboard SME</nav><h1>Example IPO</h1><section><h2>Example IPO</h2><div>Mainboard</div></section>'''
+    sme='''<nav>Mainboard SME</nav><h1>Example IPO</h1><section><h2>Example IPO</h2><div>SME</div></section>'''
+    assert parse_ipoji_segment(main)=='MAINBOARD'
+    assert parse_ipoji_segment(sme)=='SME'
+
+
+def test_named_broker_calendar_accepts_explicit_two_digit_year_dates():
+    from ipo_edge.live_sources import parse_named_calendar
+    html='''<table>
+      <tr><th>Company</th><th>Issue Type</th><th>Open Date</th><th>Close Date</th></tr>
+      <tr><td>Example Ltd</td><td>Book Building - SME</td><td>23-Sep-26</td><td>25-Sep-26</td></tr>
+    </table>'''
+    rows=parse_named_calendar(html,'https://www.muthootsecurities.com/IPO/Forthcoming-Issues')
+    assert len(rows)==1
+    assert rows[0]['segment']=='SME'
+    assert str(rows[0]['issue_open_date'])=='2026-09-23'
+    assert str(rows[0]['issue_close_date'])=='2026-09-25'
+
+
+def test_registered_broker_calendar_does_not_gain_universe_completeness_without_pagination_proof():
+    issue=row('SME')
+    one=observation('ONE',[issue],('SME',))
+    broker=observation('CMOTS_BROKER_FEED',[issue],('SME',))
+    broker['pagination_complete']=False
+    result=reconcile([one,broker],NOW)
+    assert result['segments']['SME']['status']=='COVERAGE_PARTIAL'
+    assert 'CMOTS_BROKER_FEED' not in result['segments']['SME']['groups']

@@ -193,7 +193,26 @@ def parse_ipoji_index(html, url):
 
 
 def parse_ipoji_segment(html):
-    text=BeautifulSoup(html,'html.parser').get_text(' ',strip=True)
+    soup=BeautifulSoup(html,'html.parser')
+    # IPOJi's global navigation contains both Mainboard and SME labels.
+    # Segment evidence must therefore be read from the issue-local content after
+    # the IPO heading, never from whole-page keyword presence.
+    heading=next((
+        tag for tag in soup.find_all(['h1','h2'])
+        if re.search(r'\bIPO\b',tag.get_text(' ',strip=True),re.I)
+    ),None)
+    if heading is not None:
+        for value in heading.find_all_next(string=True,limit=40):
+            label=' '.join(str(value).split()).strip()
+            if not label:
+                continue
+            if re.fullmatch(r'Mainboard',label,re.I):
+                return 'MAINBOARD'
+            if re.fullmatch(r'SME',label,re.I):
+                return 'SME'
+    # Backward-compatible fallback for simple source documents without a
+    # structured issue heading. It remains fail-closed when both labels occur.
+    text=soup.get_text(' ',strip=True)
     is_sme=bool(re.search(r'\bSME IPO\b|\bNSE SME\b|\bBSE SME\b|\bSME platform\b',text,re.I))
     is_main=bool(re.search(r'\bMainboard\b',text,re.I))
     if is_sme and not is_main:
@@ -222,7 +241,7 @@ class PublicWeb:
         start=day.replace(day=1)-timedelta(days=1)
         end=(day.replace(day=28)+timedelta(days=4)).replace(day=1)
         months=sorted({(d.year,d.month) for d in (start,day,end)})
-        for source in PUBLICATIONS[:8]:
+        for source in [p for p in PUBLICATIONS if p.calendar and p.group != 'IPOJI']:
             windows=months if '{month}' in source.url else [(day.year,day.month)]
             for year,month in windows:
                 url=source.url.format(month=calendar.month_name[month].lower(),year=year)
@@ -440,10 +459,13 @@ def parse_named_calendar(html, url):
             if len(cells)<=max(name,opened,closed,segment): continue
             values=[x.get_text(' ',strip=True) for x in cells]
             def dt(v):
+                value=re.sub(r'\bSept\b','Sep',v).strip()
                 try:
+                    if re.fullmatch(r'\d{1,2}-[A-Za-z]{3}-\d{2}',value):
+                        return datetime.strptime(value,'%d-%b-%y').date()
                     from dateutil.parser import parse
-                    if not re.search(r'20\d{2}',v): return None
-                    return parse(re.sub(r'\bSept\b','Sep',v),dayfirst=True).date()
+                    if not re.search(r'20\d{2}',value): return None
+                    return parse(value,dayfirst=True).date()
                 except (ValueError,OverflowError): return None
             op,cl=dt(values[opened]),dt(values[closed])
             seg='SME' if 'sme' in values[segment].lower() else 'MAINBOARD' if 'main' in values[segment].lower() else None
