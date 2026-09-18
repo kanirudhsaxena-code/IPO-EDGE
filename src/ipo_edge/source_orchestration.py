@@ -174,10 +174,16 @@ def reconcile(observations, now):
             fresh = fresh and obs['window_start']<=day<=obs['window_end']
         except (KeyError,ValueError,TypeError): fresh=False
         if not fresh: continue
-        if obs.get('enumerated') and obs.get('pagination_complete') and independent_group(obs):
+        enumerator = bool(obs.get('enumerated') and obs.get('pagination_complete') and independent_group(obs))
+        if enumerator:
             usable.append(obs)
         if independent_group(obs) and (obs.get('ok') or obs.get('issue_corroboration')):
             corroborators.append(obs)
+        # Only complete enumerators may define or expand the canonical universe.
+        # Issue-level corroborators can confirm an already-enumerated IPO, but can
+        # never introduce a new IPO or replace the two-enumerator completeness gate.
+        if not enumerator:
+            continue
         for row in obs.get('rows',[]):
             key=_reconciliation_key(row,union)
             old=union.get(key)
