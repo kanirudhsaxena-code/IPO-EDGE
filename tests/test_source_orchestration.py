@@ -233,3 +233,49 @@ def test_partial_reconciliation_exposes_uncorroborated_active_issues():
     assert len(missing)==1
     assert missing[0]['company_name']=='Fixture MAINBOARD'
     assert missing[0]['groups']==['ONE']
+
+
+def test_ipoji_index_parses_issue_dates_and_detail_url():
+    from ipo_edge.live_sources import parse_ipoji_index, ipoji_index_candidate_count
+    html="""
+    <table>
+      <tr><th>Company</th><th>Open Date</th><th>Close Date</th><th>Price</th><th>Listing Date</th></tr>
+      <tr><td><a href="/ipo/alpha">Alpha Limited</a></td><td>18 Sep 2026</td><td>21 Sep 2026</td><td>100 - 110</td><td>25 Sep 2026</td></tr>
+    </table>
+    """
+    rows=parse_ipoji_index(html,'https://www.ipoji.com/ipo-list?year=2026')
+    assert ipoji_index_candidate_count(html)==1
+    assert len(rows)==1
+    assert rows[0]['company_name']=='Alpha Limited'
+    assert rows[0]['issue_open_date'].isoformat()=='2026-09-18'
+    assert rows[0]['issue_close_date'].isoformat()=='2026-09-21'
+    assert rows[0]['detail_url']=='https://www.ipoji.com/ipo/alpha'
+    assert rows[0]['segment'] is None
+
+
+@pytest.mark.parametrize(('text','expected'),[
+    ('Alpha SME IPO listed on NSE SME platform','SME'),
+    ('Alpha Mainboard IPO details','MAINBOARD'),
+    ('Alpha IPO details only',None),
+    ('Alpha Mainboard and SME IPO',None),
+])
+def test_ipoji_segment_requires_explicit_unambiguous_label(text,expected):
+    from ipo_edge.live_sources import parse_ipoji_segment
+    assert parse_ipoji_segment('<html><body>'+text+'</body></html>')==expected
+
+
+@pytest.mark.parametrize(('left','right'),[
+    ('A-One Steels','A-One Steels India'),
+    ('Jindal Supreme','Jindal Supreme India'),
+    ('SpectraA Technology','SpectraA Technology Solutions'),
+])
+def test_safe_optional_suffix_aliases_merge_only_same_issue(left,right):
+    a=observation('ONE',[dict(company_name=left,segment='MAINBOARD',
+        issue_open_date='2026-09-17',issue_close_date='2026-09-21')],('MAINBOARD','SME'))
+    b=observation('TWO',[dict(company_name=right,segment='MAINBOARD',
+        issue_open_date='2026-09-17',issue_close_date='2026-09-21')],('MAINBOARD','SME'))
+    a['verified_empty']['SME']=True
+    b['verified_empty']['SME']=True
+    result=reconcile([a,b],NOW)
+    assert result['segments']['MAINBOARD']['status']=='COVERAGE_COMPLETE'
+    assert result['segments']['MAINBOARD']['ipo_count']==1

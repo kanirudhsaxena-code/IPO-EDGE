@@ -34,9 +34,18 @@ def _acronym(name):
     words=[w for w in _name_words(name) if w!='india']
     return ''.join(w[0] for w in words if w)
 
+def _optional_suffix_identity(name):
+    words=_name_words(name)
+    while words and words[-1] in {'india','solutions'}:
+        words.pop()
+    return ''.join(words)
+
 def _same_company_name(a,b):
     ia,ib=identity(a),identity(b)
     if ia==ib:
+        return True
+    sa,sb=_optional_suffix_identity(a),_optional_suffix_identity(b)
+    if sa and sa==sb:
         return True
     if _acronym(a) and _acronym(a)==identity(b):
         return True
