@@ -31,6 +31,32 @@ def parse_date(s):
         except ValueError: pass
     return None
 
+def named_calendar_candidate_count(html):
+    """Count only rows from tables that structurally match the named IPO calendar schema."""
+    count=0
+    for table in BeautifulSoup(html,'html.parser').select('table'):
+        trs=table.select('tr')
+        if not trs:
+            continue
+        headers=[x.get_text(' ',strip=True).lower() for x in trs[0].select('th,td')]
+        def col(pattern):
+            return next((i for i,h in enumerate(headers) if re.search(pattern,h)),None)
+        indexes=[col(p) for p in (
+            r'ipo name|company|ipo$',
+            r'open',
+            r'clos',
+            r'type|segment|platform',
+        )]
+        if any(x is None for x in indexes):
+            continue
+        maximum=max(indexes)
+        for tr in trs[1:]:
+            cells=tr.select('td,th')
+            if len(cells)>maximum:
+                count += 1
+    return count
+
+
 def parse_calendar(html, url):
     rows = []
     for tr in BeautifulSoup(html, 'html.parser').select('table tr'):
@@ -86,8 +112,14 @@ class PublicWeb:
                 try:
                     rows=parse_calendar(result.text,url) if source.group=='IPOMARKETS' else parse_named_calendar(result.text,url)
                     soup=BeautifulSoup(result.text,'html.parser')
-                    calendar_tables=[t for t in soup.select('table') if t.select_one('tr') and (source.group=='IPOMARKETS' or (re.search('open',t.select_one('tr').get_text(),re.I) and re.search('clos',t.select_one('tr').get_text(),re.I)))]
-                    candidate_count=sum(1 for t in calendar_tables for tr in t.select('tr')[1:] if len(tr.select('td'))>=4)
+                    if source.group=='IPOMARKETS':
+                        calendar_tables=[t for t in soup.select('table') if t.select_one('tr')]
+                        candidate_count=sum(
+                            1 for t in calendar_tables for tr in t.select('tr')[1:]
+                            if len(tr.select('td'))>=7 and tr.select_one('a[href]')
+                        )
+                    else:
+                        candidate_count=named_calendar_candidate_count(result.text)
                     parse_complete=bool(rows) and candidate_count==len(rows)
                     if source.calendar and result.ok and not parse_complete:
                         self.client.attempts[-1].update(final_source_status='SOURCE_FAILED',error='PARSER_COVERAGE_UNVERIFIED',success=False)
