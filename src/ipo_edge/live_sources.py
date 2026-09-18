@@ -41,7 +41,24 @@ def named_calendar_candidate_count(html):
         headers=[x.get_text(' ',strip=True).lower() for x in trs[0].select('th,td')]
         def col(pattern):
             return next((i for i,h in enumerate(headers) if re.search(pattern,h)),None)
-        indexes=[col(p) for p in (r'ipo name|company|ipo    rows = []
+        indexes=[col(p) for p in (
+            r'ipo name|company|ipo$',
+            r'open',
+            r'clos',
+            r'type|segment|platform',
+        )]
+        if any(x is None for x in indexes):
+            continue
+        maximum=max(indexes)
+        for tr in trs[1:]:
+            cells=tr.select('td,th')
+            if len(cells)>maximum:
+                count += 1
+    return count
+
+
+def parse_calendar(html, url):
+    rows = []
     for tr in BeautifulSoup(html, 'html.parser').select('table tr'):
         cells = tr.find_all(['td','th'])
         if len(cells) < 7: continue
@@ -67,6 +84,7 @@ def named_calendar_candidate_count(html):
                      'discovery_listing_price':number(r'₹\s*([\d,]+(?:\.\d+)?)',values[6]),
                      'discovery_issue_price':hi if listing_date else None})
     return rows
+
 
 class PublicWeb:
     def __init__(self, execution_config=None):
