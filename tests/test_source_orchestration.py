@@ -330,3 +330,19 @@ def test_registered_broker_calendar_does_not_gain_universe_completeness_without_
     result=reconcile([one,broker],NOW)
     assert result['segments']['SME']['status']=='COVERAGE_PARTIAL'
     assert 'CMOTS_BROKER_FEED' not in result['segments']['SME']['groups']
+
+
+def test_corroborator_only_rows_do_not_expand_canonical_universe():
+    canonical=row('SME')
+    extra={**row('SME'),'company_name':'Single Source Extra'}
+    one=observation('ONE',[canonical],('SME',))
+    two=observation('TWO',[canonical],('SME',))
+    detail=observation('DETAIL',[canonical,extra],('SME',))
+    detail['enumerated']=False
+    detail['pagination_complete']=False
+    detail['issue_corroboration']=True
+    result=reconcile([one,two,detail],NOW)
+    names={r['company_name'] for r in result['rows']}
+    assert canonical['company_name'] in names
+    assert 'Single Source Extra' not in names
+    assert result['segments']['SME']['status']=='COVERAGE_COMPLETE'
