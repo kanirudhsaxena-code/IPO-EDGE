@@ -279,3 +279,23 @@ def test_safe_optional_suffix_aliases_merge_only_same_issue(left,right):
     result=reconcile([a,b],NOW)
     assert result['segments']['MAINBOARD']['status']=='COVERAGE_COMPLETE'
     assert result['segments']['MAINBOARD']['ipo_count']==1
+
+
+def test_verified_detail_rows_can_corroborate_issue_without_certifying_universe():
+    issue=row('MAINBOARD')
+    complete_one=observation('ONE',[issue])
+    complete_two=observation('TWO',[issue])
+    # Keep two complete enumerators so universe completeness is independently certified.
+    partial_detail=observation('IPOJI',[issue])
+    partial_detail.update(ok=False,enumerated=False,issue_corroboration=True,verified_empty={})
+    result=reconcile([complete_one,complete_two,partial_detail],NOW)
+    assert result['coverage_status']=='COVERAGE_COMPLETE'
+    assert 'IPOJI' not in result['segments']['MAINBOARD']['groups']
+
+def test_partial_detail_source_cannot_replace_second_complete_enumerator():
+    issue=row('MAINBOARD')
+    complete_one=observation('ONE',[issue])
+    partial_detail=observation('IPOJI',[issue])
+    partial_detail.update(ok=False,enumerated=False,issue_corroboration=True,verified_empty={})
+    result=reconcile([complete_one,partial_detail],NOW)
+    assert result['segments']['MAINBOARD']['status']=='COVERAGE_PARTIAL'
