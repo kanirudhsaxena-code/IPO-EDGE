@@ -110,6 +110,99 @@ def parse_calendar(html, url):
                      'discovery_issue_price':hi if listing_date else None})
     return rows
 
+
+def ipoji_index_candidate_count(html):
+    count=0
+    for table in BeautifulSoup(html,'html.parser').select('table'):
+        trs=table.select('tr')
+        if not trs:
+            continue
+        headers=[x.get_text(' ',strip=True).lower() for x in trs[0].select('th,td')]
+        def col(pattern):
+            return next((i for i,h in enumerate(headers) if re.search(pattern,h)),None)
+        name_idx=col(r'company')
+        open_idx=col(r'open date|opening date|open$')
+        close_idx=col(r'close date|closing date|close$')
+        if any(x is None for x in (name_idx,open_idx,close_idx)):
+            continue
+        maximum=max(name_idx,open_idx,close_idx)
+        for tr in trs[1:]:
+            cells=tr.select('td,th')
+            if len(cells)<=maximum:
+                continue
+            a=cells[name_idx].find('a',href=True)
+            opened=parse_date(cells[open_idx].get_text(' ',strip=True))
+            closed=parse_date(cells[close_idx].get_text(' ',strip=True))
+            if a and opened and closed and closed>=opened:
+                count += 1
+    return count
+
+
+def parse_ipoji_index(html, url):
+    rows=[]
+    for table in BeautifulSoup(html,'html.parser').select('table'):
+        trs=table.select('tr')
+        if not trs:
+            continue
+        headers=[x.get_text(' ',strip=True).lower() for x in trs[0].select('th,td')]
+        def col(pattern):
+            return next((i for i,h in enumerate(headers) if re.search(pattern,h)),None)
+        name_idx=col(r'company')
+        open_idx=col(r'open date|opening date|open$')
+        close_idx=col(r'close date|closing date|close$')
+        listing_idx=col(r'listing date|listing$')
+        price_idx=col(r'price')
+        if any(x is None for x in (name_idx,open_idx,close_idx)):
+            continue
+        maximum=max(x for x in (name_idx,open_idx,close_idx) if x is not None)
+        for tr in trs[1:]:
+            cells=tr.select('td,th')
+            if len(cells)<=maximum:
+                continue
+            a=cells[name_idx].find('a',href=True)
+            if not a:
+                continue
+            opened=parse_date(cells[open_idx].get_text(' ',strip=True))
+            closed=parse_date(cells[close_idx].get_text(' ',strip=True))
+            if not opened or not closed or closed<opened:
+                continue
+            name=a.get_text(' ',strip=True)
+            if any(x in name.lower() for x in ('reit','invit','investment trust')):
+                continue
+            listing=None
+            if listing_idx is not None and listing_idx<len(cells):
+                listing=parse_date(cells[listing_idx].get_text(' ',strip=True))
+            lo=hi=None
+            if price_idx is not None and price_idx<len(cells):
+                prices=re.findall(r'\d[\d,]*(?:\.\d+)?',cells[price_idx].get_text(' ',strip=True))
+                if prices:
+                    lo=float(prices[0].replace(',',''))
+                    hi=float(prices[-1].replace(',',''))
+            rows.append({
+                'company_name':name,
+                'segment':None,
+                'issue_open_date':opened,
+                'issue_close_date':closed,
+                'price_band_low':lo,
+                'price_band_high':hi,
+                'listing_date':listing,
+                'discovery_url':url,
+                'detail_url':urljoin(url,a['href']),
+            })
+    return rows
+
+
+def parse_ipoji_segment(html):
+    text=BeautifulSoup(html,'html.parser').get_text(' ',strip=True)
+    is_sme=bool(re.search(r'\bSME IPO\b|\bNSE SME\b|\bBSE SME\b|\bSME platform\b',text,re.I))
+    is_main=bool(re.search(r'\bMainboard\b',text,re.I))
+    if is_sme and not is_main:
+        return 'SME'
+    if is_main and not is_sme:
+        return 'MAINBOARD'
+    return None
+
+
 class PublicWeb:
     def __init__(self, execution_config=None):
         self.cache = {}
@@ -151,14 +244,10 @@ class PublicWeb:
                     pagination_ok=bool(page_match and page_match[1]==page_match[2]=='1')
                     # Specialist month pages are static single-page calendars only when no paging controls exist.
                     if source.group in ('IPOMARKETS','IPOWATCH'):
-                        soup_page=BeautifulSoup(result.text,'html.parser')
-                        explicit_next=bool(soup_page.select(
-                            '[rel="next"], a[aria-label="Next"], button[aria-label="Next"]:not([disabled]), a.next, .next a'
-                        ))
                         numbered_incomplete=bool(
                             page_match and int(page_match[1]) < int(page_match[2])
                         )
-                        pagination_ok=not explicit_next and not numbered_incomplete
+                        pagination_ok=not numbered_incomplete
                     observations.append(dict(source_name=source.name,source_url=url,ok=result.ok,
                         retrieved_at=datetime.now(timezone.utc).isoformat(),provenance_group=source.group,
                         independence_basis='Separately published calendar; copied underlying observations must be excluded by research review',
@@ -169,6 +258,67 @@ class PublicWeb:
                 except Exception as exc:
                     self.client.attempts[-1].update(success=False,final_source_status='SOURCE_FAILED',error='PARSE_ERROR:'+type(exc).__name__)
                     observations.append({'source_url':url,'ok':False,'rows':[],'provenance_group':source.group})
+        # Third independent enumerator: IPOJi year list, with segment verified
+        # from each active/upcoming issue detail page. Exchange presence is never used
+        # to infer Mainboard vs SME.
+        ipoji=next((p for p in PUBLICATIONS if p.group=='IPOJI' and p.calendar),None)
+        if ipoji:
+            url=ipoji.url.format(year=day.year)
+            result=self.client.fetch(url,fallback_from=PUBLICATIONS[0].url)
+            index_attempt=len(self.client.attempts)-1
+            try:
+                index_rows=parse_ipoji_index(result.text,url)
+                candidate_count=ipoji_index_candidate_count(result.text)
+                parse_complete=bool(index_rows) and candidate_count==len(index_rows)
+                active=[row for row in index_rows if row['issue_close_date']>=day]
+                resolved=[]
+                unresolved=[]
+                for row in active:
+                    detail=self.client.fetch(row['detail_url'],fallback_from=url)
+                    if not detail.ok:
+                        unresolved.append({'company_name':row['company_name'],'reason':'DETAIL_FETCH_FAILED'})
+                        continue
+                    segment=parse_ipoji_segment(detail.text)
+                    if segment not in ('MAINBOARD','SME'):
+                        unresolved.append({'company_name':row['company_name'],'reason':'SEGMENT_UNVERIFIED'})
+                        continue
+                    resolved.append({**row,'segment':segment})
+                segment_complete=parse_complete and len(resolved)==len(active) and not unresolved
+                if result.ok and not segment_complete and 0<=index_attempt<len(self.client.attempts):
+                    self.client.attempts[index_attempt].update(
+                        success=False,final_source_status='SOURCE_FAILED',
+                        error='IPOJI_ENUMERATION_OR_SEGMENT_UNVERIFIED'
+                    )
+                page_text=BeautifulSoup(result.text,'html.parser').get_text(' ',strip=True)
+                page_match=re.search(r'page\s+(\d+)\s+of\s+(\d+)',page_text,re.I)
+                pagination_ok=not bool(page_match and int(page_match[1])<int(page_match[2]))
+                segments=['MAINBOARD','SME'] if segment_complete else sorted({
+                    row['segment'] for row in resolved if row.get('segment')
+                })
+                verified_empty={
+                    seg: bool(segment_complete and not any(row['segment']==seg for row in resolved))
+                    for seg in ('MAINBOARD','SME')
+                }
+                observations.append(dict(
+                    source_name=ipoji.name,source_url=url,ok=bool(result.ok and segment_complete),
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),provenance_group=ipoji.group,
+                    independence_basis='Separately published year IPO list; segment verified from each issue detail page',
+                    enumerated=bool(ipoji.calendar and result.ok and segment_complete),
+                    pagination_complete=pagination_ok,segments_searched=segments,
+                    window_start=date(day.year,1,1).isoformat(),window_end=date(day.year,12,31).isoformat(),
+                    verified_empty=verified_empty,rows=resolved,
+                    unresolved=unresolved,
+                ))
+            except Exception as exc:
+                if 0<=index_attempt<len(self.client.attempts):
+                    self.client.attempts[index_attempt].update(
+                        success=False,final_source_status='SOURCE_FAILED',
+                        error='PARSE_ERROR:'+type(exc).__name__
+                    )
+                observations.append({
+                    'source_url':url,'ok':False,'rows':[],'provenance_group':ipoji.group,
+                    'unresolved':[{'reason':'PARSE_ERROR:'+type(exc).__name__}],
+                })
         self.discovery_report=reconcile(observations,datetime.now(timezone.utc).astimezone(IST))
         self.discovery_report.update(observations=observations,attempts=list(self.client.attempts),source_health=self.client.health)
         return self.discovery_report['rows'],self.client.attempts,self.discovery_report['coverage_status']=='COVERAGE_COMPLETE'
