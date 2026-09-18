@@ -35,15 +35,16 @@ class FetchResult:
     attempts: list
 
 class SourceClient:
-    def __init__(self, config, transport=None, sleep=time.sleep):
+    def __init__(self, config, transport=None, sleep=time.sleep, extra_publications=()):
         self.config = config
         self.transport = transport or requests.get
         self.sleep = sleep
         self.attempts = []
         self.blocked = set()
+        self.extra_publications = tuple(extra_publications or ())
 
     def fetch(self, url, block=None, fallback_from=None):
-        p = publication_for_url(url)
+        p = publication_for_url(url, self.extra_publications)
         if urlparse(url).scheme != 'https' or p is None:
             raise ValueError('Unregistered public source')
         start = len(self.attempts)
