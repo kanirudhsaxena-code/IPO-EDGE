@@ -346,3 +346,12 @@ def test_corroborator_only_rows_do_not_expand_canonical_universe():
     assert canonical['company_name'] in names
     assert 'Single Source Extra' not in names
     assert result['segments']['SME']['status']=='COVERAGE_COMPLETE'
+
+
+def test_iifl_upcoming_ipo_calendar_is_registered_as_guarded_broker_corroborator():
+    from ipo_edge.sources import publication_for_url
+    source=publication_for_url('https://www.indiainfoline.com/ipo/upcoming-ipo')
+    assert source is not None
+    assert source.group=='IIFL_CAPITAL'
+    assert source.source_type=='BROKER_RESEARCH'
+    assert source.calendar is True
