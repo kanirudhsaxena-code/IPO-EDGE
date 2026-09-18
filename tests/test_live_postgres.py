@@ -54,6 +54,7 @@ def test_repeat_run_as_runtime_role_and_history_integrity(db):
         assert first['checkpoints']==1 and second['checkpoints']==0
         assert first['outcomes']==1 and second['outcomes']==0
         assert c.execute('SELECT count(*) AS n FROM learnings').fetchone()['n']==1
+        assert c.execute("SELECT count(*) AS n FROM runtime_receipts WHERE kind='VALIDATION'").fetchone()['n']>=1
         assert history(c)==before
         report=render(c,second)
         assert len(report.split('\n\n'))==4

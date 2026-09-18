@@ -1,6 +1,9 @@
 name: IPO EDGE V1.1 Live
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '30 8 * * 1-5'
+    - cron: '15 14 * * 1-5'
 permissions:
   contents: read
 concurrency:
