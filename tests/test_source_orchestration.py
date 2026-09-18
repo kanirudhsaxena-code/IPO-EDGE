@@ -208,3 +208,28 @@ def test_similar_names_on_different_issue_dates_remain_distinct():
         issue_open_date='2026-09-13',issue_close_date='2026-09-15')])
     result=reconcile([a,b],NOW)
     assert result['segments']['MAINBOARD']['status']=='COVERAGE_PARTIAL'
+
+
+def test_ipo_markets_candidate_count_matches_valid_rows_only():
+    from ipo_edge.live_sources import ipo_markets_candidate_count, parse_calendar
+    html = """
+    <table>
+      <tr><th>Name</th><th>Status</th><th>Price</th><th>X</th><th>Y</th><th>Dates</th><th>Listing</th></tr>
+      <tr><td><a href="/alpha">Alpha Mainboard IPO</a></td><td></td><td>100-110</td><td></td><td></td><td>18 Sep 2026 - 21 Sep 2026</td><td></td></tr>
+      <tr><td><a href="/reit">Noise REIT</a></td><td></td><td>100</td><td></td><td></td><td>18 Sep 2026 - 21 Sep 2026</td><td></td></tr>
+      <tr><td>Malformed SME IPO</td><td></td><td>100</td><td></td><td></td><td>18 Sep 2026 - 21 Sep 2026</td><td></td></tr>
+    </table>
+    """
+    rows=parse_calendar(html,'https://ipomarkets.com/ipo-calendar/september-2026')
+    assert len(rows)==1
+    assert ipo_markets_candidate_count(html)==1
+
+
+def test_partial_reconciliation_exposes_uncorroborated_active_issues():
+    a=observation('ONE',[row('MAINBOARD')],('MAINBOARD','SME'))
+    b=observation('TWO',[],('MAINBOARD','SME'))
+    result=reconcile([a,b],NOW)
+    missing=result['segments']['MAINBOARD']['uncorroborated']
+    assert len(missing)==1
+    assert missing[0]['company_name']=='Fixture MAINBOARD'
+    assert missing[0]['groups']==['ONE']
