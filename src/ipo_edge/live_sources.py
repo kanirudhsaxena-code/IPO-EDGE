@@ -31,6 +31,31 @@ def parse_date(s):
         except ValueError: pass
     return None
 
+def ipo_markets_candidate_count(html):
+    """Count only structurally valid Mainboard/SME IPO rows for IPO Markets."""
+    count=0
+    for tr in BeautifulSoup(html,'html.parser').select('table tr'):
+        cells=tr.find_all(['td','th'])
+        if len(cells)<7:
+            continue
+        a=cells[0].find('a',href=True)
+        if not a:
+            continue
+        values=[x.get_text(' ',strip=True) for x in cells]
+        segment='SME' if 'SME' in values[0] else 'MAINBOARD' if 'Mainboard' in values[0] else None
+        ds=re.findall(r'\d{1,2} [A-Za-z]+ 20\d{2}',values[5])
+        if not segment or len(ds)!=2:
+            continue
+        opened,closed=map(parse_date,ds)
+        name=a.get_text(' ',strip=True)
+        if not opened or not closed or closed<opened:
+            continue
+        if any(x in name.lower() for x in ('reit','invit','investment trust')):
+            continue
+        count += 1
+    return count
+
+
 def named_calendar_candidate_count(html):
     """Count only rows from tables that structurally match the named IPO calendar schema."""
     count=0
@@ -113,11 +138,7 @@ class PublicWeb:
                     rows=parse_calendar(result.text,url) if source.group=='IPOMARKETS' else parse_named_calendar(result.text,url)
                     soup=BeautifulSoup(result.text,'html.parser')
                     if source.group=='IPOMARKETS':
-                        calendar_tables=[t for t in soup.select('table') if t.select_one('tr')]
-                        candidate_count=sum(
-                            1 for t in calendar_tables for tr in t.select('tr')[1:]
-                            if len(tr.select('td'))>=7 and tr.select_one('a[href]')
-                        )
+                        candidate_count=ipo_markets_candidate_count(result.text)
                     else:
                         candidate_count=named_calendar_candidate_count(result.text)
                     parse_complete=bool(rows) and candidate_count==len(rows)
@@ -130,7 +151,14 @@ class PublicWeb:
                     pagination_ok=bool(page_match and page_match[1]==page_match[2]=='1')
                     # Specialist month pages are static single-page calendars only when no paging controls exist.
                     if source.group in ('IPOMARKETS','IPOWATCH'):
-                        pagination_ok=not bool(BeautifulSoup(result.text,'html.parser').select('[rel="next"], .pagination, [aria-label="Next"]'))
+                        soup_page=BeautifulSoup(result.text,'html.parser')
+                        explicit_next=bool(soup_page.select(
+                            '[rel="next"], a[aria-label="Next"], button[aria-label="Next"]:not([disabled]), a.next, .next a'
+                        ))
+                        numbered_incomplete=bool(
+                            page_match and int(page_match[1]) < int(page_match[2])
+                        )
+                        pagination_ok=not explicit_next and not numbered_incomplete
                     observations.append(dict(source_name=source.name,source_url=url,ok=result.ok,
                         retrieved_at=datetime.now(timezone.utc).isoformat(),provenance_group=source.group,
                         independence_basis='Separately published calendar; copied underlying observations must be excluded by research review',

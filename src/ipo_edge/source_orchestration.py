@@ -180,18 +180,31 @@ def reconcile(observations, now):
             k for k,v in union.items()
             if v.get('segment')==segment and str(v.get('issue_close_date',''))>=day
         }
-        corroborated=all(
-            len({
+        corroboration_groups={
+            k: {
                 independent_group(o) for o in scans
                 if _observation_has_issue(o,union[k])
-            })>=2
+            }
             for k in expected
-        )
+        }
+        corroborated=all(len(gs)>=2 for gs in corroboration_groups.values())
+        uncorroborated=[
+            {
+                'company_name':union[k].get('company_name'),
+                'segment':union[k].get('segment'),
+                'issue_open_date':str(union[k].get('issue_open_date')),
+                'issue_close_date':str(union[k].get('issue_close_date')),
+                'groups':sorted(g for g in corroboration_groups[k] if g),
+            }
+            for k in sorted(expected)
+            if len(corroboration_groups[k])<2
+        ]
         # Two enumerations may legitimately be empty only with explicit empty proof.
         empty_ok=bool(expected) or sum(bool(o.get('verified_empty',{}).get(segment)) for o in scans)>=2
         complete=len(groups)>=2 and corroborated and empty_ok and not conflicts
         status[segment]={'status':'COVERAGE_COMPLETE' if complete else 'COVERAGE_PARTIAL',
                          'groups':sorted(groups),'ipo_count':len(expected),'coverage_scope':'ACTIVE_OR_UPCOMING',
+                         'uncorroborated':uncorroborated,
                          'source_urls':[o['source_url'] for o in scans]}
     blocked={c['company'] for c in conflicts}
     rows=[v for k,v in union.items() if k not in blocked]
