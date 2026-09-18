@@ -193,7 +193,26 @@ def parse_ipoji_index(html, url):
 
 
 def parse_ipoji_segment(html):
-    text=BeautifulSoup(html,'html.parser').get_text(' ',strip=True)
+    soup=BeautifulSoup(html,'html.parser')
+    # IPOJi's global navigation contains both Mainboard and SME labels.
+    # Segment evidence must therefore be read from the issue-local content after
+    # the IPO heading, never from whole-page keyword presence.
+    heading=next((
+        tag for tag in soup.find_all(['h1','h2'])
+        if re.search(r'\bIPO\b',tag.get_text(' ',strip=True),re.I)
+    ),None)
+    if heading is not None:
+        for value in heading.find_all_next(string=True,limit=40):
+            label=' '.join(str(value).split()).strip()
+            if not label:
+                continue
+            if re.fullmatch(r'Mainboard',label,re.I):
+                return 'MAINBOARD'
+            if re.fullmatch(r'SME',label,re.I):
+                return 'SME'
+    # Backward-compatible fallback for simple source documents without a
+    # structured issue heading. It remains fail-closed when both labels occur.
+    text=soup.get_text(' ',strip=True)
     is_sme=bool(re.search(r'\bSME IPO\b|\bNSE SME\b|\bBSE SME\b|\bSME platform\b',text,re.I))
     is_main=bool(re.search(r'\bMainboard\b',text,re.I))
     if is_sme and not is_main:

@@ -299,3 +299,11 @@ def test_partial_detail_source_cannot_replace_second_complete_enumerator():
     partial_detail.update(ok=False,enumerated=False,issue_corroboration=True,verified_empty={})
     result=reconcile([complete_one,partial_detail],NOW)
     assert result['segments']['MAINBOARD']['status']=='COVERAGE_PARTIAL'
+
+
+def test_ipoji_segment_ignores_global_navigation_labels():
+    from ipo_edge.live_sources import parse_ipoji_segment
+    main='''<nav>Mainboard SME</nav><h1>Example IPO</h1><section><h2>Example IPO</h2><div>Mainboard</div></section>'''
+    sme='''<nav>Mainboard SME</nav><h1>Example IPO</h1><section><h2>Example IPO</h2><div>SME</div></section>'''
+    assert parse_ipoji_segment(main)=='MAINBOARD'
+    assert parse_ipoji_segment(sme)=='SME'
