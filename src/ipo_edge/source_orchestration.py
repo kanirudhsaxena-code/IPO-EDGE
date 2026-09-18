@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import math
 import re
 import time
+from difflib import SequenceMatcher
 import requests
 from .sources import publication_for_url
 
@@ -22,6 +23,40 @@ def timestamp(value):
 
 def identity(name):
     return re.sub(r'[^a-z0-9]', '', re.sub(r'\b(limited|ltd|ipo)\b', '', name.lower()))
+
+def _name_words(name):
+    return [
+        w for w in re.findall(r'[a-z0-9]+', str(name).lower())
+        if w not in {'limited','ltd','ipo','of','the'}
+    ]
+
+def _acronym(name):
+    words=[w for w in _name_words(name) if w!='india']
+    return ''.join(w[0] for w in words if w)
+
+def _same_company_name(a,b):
+    ia,ib=identity(a),identity(b)
+    if ia==ib:
+        return True
+    if _acronym(a) and _acronym(a)==identity(b):
+        return True
+    if _acronym(b) and _acronym(b)==identity(a):
+        return True
+    ratio=SequenceMatcher(None,ia,ib).ratio()
+    return ratio>=0.82
+
+def _reconciliation_key(row, union):
+    direct=identity(row['company_name'])
+    if direct in union:
+        return direct
+    for key,existing in union.items():
+        same_issue=all(
+            str(existing.get(field))==str(row.get(field))
+            for field in ('segment','issue_open_date','issue_close_date')
+        )
+        if same_issue and _same_company_name(existing.get('company_name',''),row.get('company_name','')):
+            return key
+    return direct
 
 def independent_group(item):
     # Explicit lineage is required: different hosts alone do not prove independence.
@@ -120,7 +155,7 @@ def reconcile(observations, now):
         if not fresh: continue
         if obs.get('enumerated') and obs.get('pagination_complete') and independent_group(obs): usable.append(obs)
         for row in obs.get('rows',[]):
-            key=identity(row['company_name'])
+            key=_reconciliation_key(row,union)
             old=union.get(key)
             if old and any(str(old.get(k))!=str(row.get(k)) for k in ('segment','issue_open_date','issue_close_date')):
                 conflicts.append({'company':key,'status':'SOURCE_CONFLICT','reason':'IDENTITY_OR_DATE_CONFLICT','sources':[provenance[key],obs.get('source_url')]})
@@ -129,13 +164,17 @@ def reconcile(observations, now):
     for segment in SEGMENTS:
         scans=[o for o in usable if segment in o.get('segments_searched',[])]
         groups={independent_group(o) for o in scans}
-        expected={k for k,v in union.items() if v.get('segment')==segment}
+        expected={
+            k for k,v in union.items()
+            if v.get('segment')==segment and str(v.get('issue_close_date',''))>=day
+        }
         corroborated=all(len({independent_group(o) for o in scans if any(identity(r['company_name'])==k for r in o.get('rows',[]))})>=2 for k in expected)
         # Two enumerations may legitimately be empty only with explicit empty proof.
         empty_ok=bool(expected) or sum(bool(o.get('verified_empty',{}).get(segment)) for o in scans)>=2
         complete=len(groups)>=2 and corroborated and empty_ok and not conflicts
         status[segment]={'status':'COVERAGE_COMPLETE' if complete else 'COVERAGE_PARTIAL',
-                         'groups':sorted(groups),'ipo_count':len(expected),'source_urls':[o['source_url'] for o in scans]}
+                         'groups':sorted(groups),'ipo_count':len(expected),'coverage_scope':'ACTIVE_OR_UPCOMING',
+                         'source_urls':[o['source_url'] for o in scans]}
     blocked={c['company'] for c in conflicts}
     rows=[v for k,v in union.items() if k not in blocked]
     return {'segments':status,'conflicts':conflicts,'rows':rows,
