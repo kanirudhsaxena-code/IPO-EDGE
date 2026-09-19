@@ -1,11 +1,14 @@
 name: IPO EDGE V1.1 Live
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'runtime/live_v11_trigger.txt'
   schedule:
     - cron: '30 8 * * 1-5'
     - cron: '15 14 * * 1-5'
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: ipo-edge-live-v11
   cancel-in-progress: false
@@ -23,6 +26,21 @@ jobs:
           python-version: '3.11'
       - run: pip install .
       - run: python scripts/run_live.py
+      - name: Export governed Console snapshot
+        if: always()
+        run: python scripts/export_console_snapshot.py
+      - name: Publish Console snapshot
+        if: always()
+        run: |
+          git config user.name "ipo-edge-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/console_snapshot.json
+          if git diff --cached --quiet; then
+            echo "Console snapshot unchanged"
+          else
+            git commit -m "Update IPO Console snapshot [skip ci]"
+            git push origin HEAD:main
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
