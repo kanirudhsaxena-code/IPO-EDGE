@@ -1,0 +1,23 @@
+{
+  "manifest_version": "1.0",
+  "consumer": "IPO_EDGE",
+  "master_spec": {
+    "source": "GOOGLE_DRIVE",
+    "file_id": "17Znmj-rASDDuPbb9aRD9M6nZYlnDVVZfl7Qgg--eZjo",
+    "title": "IPO EDGE Master Specification V1.1",
+    "canonical_spec_version": "IPO EDGE V1.1",
+    "modified_at": "2026-09-18T19:00:35.410Z",
+    "content_sha256_lf": "4d91fa51e9391300632d462f85062ab7dd301f3f049d8f5b2566a498115aaee0",
+    "hash_normalization": "CRLF_TO_LF"
+  },
+  "production_binding": {
+    "framework_version": "1.1",
+    "framework_status": "PRODUCTION",
+    "base_version": "1.0",
+    "base_score_weights_unchanged": true,
+    "base_grade_thresholds_unchanged": true,
+    "critical_evidence_policy_unchanged": true
+  },
+  "binding_status": "BOUND",
+  "governance_note": "IPO EDGE V1.1 is the user-approved production framework; the V1.1 overlay preserves base scoring weights and grade thresholds."
+}
