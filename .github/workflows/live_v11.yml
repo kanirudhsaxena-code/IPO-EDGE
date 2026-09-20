@@ -4,9 +4,6 @@ on:
   push:
     paths:
       - 'runtime/live_v11_trigger.txt'
-  schedule:
-    - cron: '30 8 * * 1-5'
-    - cron: '15 14 * * 1-5'
 permissions:
   contents: write
 concurrency:
@@ -18,15 +15,15 @@ jobs:
     timeout-minutes: 45
     environment: ipo-edge-live
     env:
-      DATABASE_URL: ${{ secrets.IPO_EDGE_RUNTIME_DATABASE_URL || secrets.DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.IPO_EDGE_RUNTIME_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: pip install .
-      - name: Validate live database configuration
-        run: python -c "import os; assert os.environ.get('DATABASE_URL'), 'IPO EDGE live database secret missing'; print('IPO EDGE live database configured')"
+      - name: Validate restricted live database configuration
+        run: python -c "import os; assert os.environ.get('DATABASE_URL'), 'IPO EDGE restricted runtime database secret missing'; print('IPO EDGE restricted runtime database configured')"
       - run: python scripts/run_live.py
       - name: Export governed Console snapshot
         if: always()
