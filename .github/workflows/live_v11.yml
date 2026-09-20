@@ -18,13 +18,15 @@ jobs:
     timeout-minutes: 45
     environment: ipo-edge-live
     env:
-      DATABASE_URL: ${{ secrets.IPO_EDGE_RUNTIME_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.IPO_EDGE_RUNTIME_DATABASE_URL || secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: pip install .
+      - name: Validate live database configuration
+        run: python -c "import os; assert os.environ.get('DATABASE_URL'), 'IPO EDGE live database secret missing'; print('IPO EDGE live database configured')"
       - run: python scripts/run_live.py
       - name: Export governed Console snapshot
         if: always()
