@@ -26,7 +26,7 @@ Owner: ChatGPT Executor
 Target: Cycle 1
 - [x] Create isolated GitHub branch `ipo-execution-hardening-v1.1`.
 - [x] Freeze model-change scope in this build document.
-- [ ] Add automated guard test: identical evidence must produce identical V1.1 score/grade/decision.
+- [x] Add automated guard test: identical evidence must produce identical V1.1 score/grade/decision. Evidence: `tests/test_execution_hardening_model_lock.py`.
 - [ ] Add test preventing modification of frozen historical V1.0/V1.1 checkpoint fixtures.
 - [ ] Define rollback switch for every new provider/orchestrator change.
 Acceptance: no model-rule diff; no historical mutation path.
