@@ -27,8 +27,8 @@ Target: Cycle 1
 - [x] Create isolated GitHub branch `ipo-execution-hardening-v1.1`.
 - [x] Freeze model-change scope in this build document.
 - [x] Add automated guard test: identical evidence must produce identical V1.1 score/grade/decision. Evidence: `tests/test_execution_hardening_model_lock.py`.
-- [ ] Add test preventing modification of frozen historical V1.0/V1.1 checkpoint fixtures.
-- [ ] Define rollback switch for every new provider/orchestrator change.
+- [x] Add test preventing modification of frozen historical V1.0/V1.1 checkpoint fixtures. Evidence: `tests/test_execution_hardening_history_lock.py` plus existing isolated-DB `tests/checkpoint_immutability.sql`.
+- [x] Define rollback switch for every new provider/orchestrator change. Evidence: `config/execution_hardening_v1.1.json` and `tests/test_execution_hardening_switches.py`; all hardening features are fail-closed/off by default and production writes are disabled.
 Acceptance: no model-rule diff; no historical mutation path.
 
 ### EH-01 — Current-run forensic baseline
