@@ -34,10 +34,10 @@ Acceptance: no model-rule diff; no historical mutation path.
 ### EH-01 — Current-run forensic baseline
 Owner: ChatGPT Executor
 Target: Cycles 1–2
-- [ ] Classify existing NV/PARTIAL/missed cases by execution cause: retrieval, identity, timing, conflict, universe, infrastructure, or model-related/deferred.
-- [ ] Reconcile the 123 frozen T2 population against assessed rows and identify any unresolved/pending records.
-- [ ] Record current baseline rates: universe completion, critical-block completion, T2 completion, NV, PARTIAL, source failures, identity conflicts.
-- [ ] Keep model-related misses tagged DEFERRED; no model change.
+- [ ] Classify existing NV/PARTIAL/missed cases by execution cause: retrieval, identity, timing, conflict, universe, infrastructure, or model-related/deferred. Tooling committed: `scripts/execution_hardening_forensics.py`; taxonomy tests: `tests/test_execution_hardening_forensics.py`. Live classification awaits database read access.
+- [ ] Reconcile the 123 frozen T2 population against assessed rows and identify any unresolved/pending records. Read-only reconciliation query committed; live execution awaits database read access.
+- [ ] Record current baseline rates: universe completion, critical-block completion, T2 completion, NV, PARTIAL, source failures, identity conflicts. Baseline collector committed; live execution awaits database read access.
+- [x] Keep model-related misses tagged DEFERRED; no model change. Evidence: `MODEL_RELATED_DEFERRED` is an execution-only terminal taxonomy in `scripts/execution_hardening_forensics.py`, guarded by `tests/test_execution_hardening_forensics.py`.
 Acceptance: every execution-related miss has a reproducible root-cause code.
 
 ### EH-02 — Universe discovery hardening
@@ -140,6 +140,8 @@ Only raise to the user when the executor cannot proceed without account-level ac
 - missing/expired Upstox read-only credential after alternative sources continue;
 - connector permission required to create an isolated Neon test branch/schema;
 - explicit approval to merge or activate production changes.
+
+Current transient dependency: the connected Neon read-only SQL interface is rejecting live EH-01 baseline execution because project resolution is unavailable. This does not block repository hardening; EH-01 tooling is read-only and ready to run once database read access is restored.
 
 ## Non-negotiable acceptance gates
 1. Zero model-rule changes.
