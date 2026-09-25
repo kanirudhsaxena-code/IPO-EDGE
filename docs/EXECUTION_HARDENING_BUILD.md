@@ -43,7 +43,7 @@ Acceptance: every execution-related miss has a reproducible root-cause code.
 ### EH-02 — Universe discovery hardening
 Owner: ChatGPT Executor
 Target: Cycles 2–4
-- [ ] Build source union across NSE, BSE, SEBI, Upstox IPO API, and approved specialist calendars. Reconciliation core committed in `scripts/execution_hardening_universe.py`; provider adapters remain pending.
+- [ ] Build source union across NSE, BSE, SEBI, Upstox IPO API, and approved specialist calendars. Reconciliation core committed in `scripts/execution_hardening_universe.py`; fail-closed provider normalization committed in `scripts/execution_hardening_universe_providers.py` with tests in `tests/test_execution_hardening_universe_providers.py`; live read-only fetch wiring and verified enumeration remain pending.
 - [x] Reconcile Mainboard and SME independently. Evidence: `reconcile_universe()` plus `test_mainboard_and_sme_reconcile_independently`.
 - [x] Require explicit enumeration/completeness evidence before a cycle can be COMPLETED. Evidence: healthy source requires `enumerated` and `parse_ok`; completeness tests in `tests/test_execution_hardening_universe.py`.
 - [x] Treat source outage or empty parse as PARTIAL/FAILED unless independent sources prove the scoped universe. Evidence: fail-closed reconciliation and empty-universe tests.
@@ -53,10 +53,10 @@ Acceptance: no single source can silently define an empty or incomplete universe
 ### EH-03 — Canonical identity resolver
 Owner: ChatGPT Executor
 Target: Cycles 3–5
-- [ ] Add live canonical identity map using ISIN first, then exchange identifier / Upstox IPO ID, then canonical company name + aliases.
-- [ ] Preserve historical stored names; add aliases rather than rewriting frozen rows.
-- [ ] Detect duplicate/variant entities and malformed records before research persistence.
-- [ ] Add tests for known variants such as Hero Motors/Hero Motors Limited and Jindal Supreme/Jindal Supreme India.
+- [ ] Add live canonical identity map using ISIN first, then exchange identifier / Upstox IPO ID, then canonical company name + aliases. Resolver core committed in `scripts/execution_hardening_identity.py`; live/shadow ingress wiring remains pending.
+- [x] Preserve historical stored names; add aliases rather than rewriting frozen rows. Evidence: fail-closed resolver preserves `input_name` and performs no DB writes; guarded by `tests/test_execution_hardening_identity.py`.
+- [x] Detect duplicate/variant entities and malformed records before research persistence. Evidence: duplicate alias conflicts and unresolved variants fail closed in `scripts/execution_hardening_identity.py`, guarded by `tests/test_execution_hardening_identity.py`.
+- [x] Add tests for known variants such as Hero Motors/Hero Motors Limited and Jindal Supreme/Jindal Supreme India. Evidence: `tests/test_execution_hardening_identity.py`.
 Acceptance: one live IPO identity maps to one canonical research target without altering historical records.
 
 ### EH-04 — Upstox read-only provider
