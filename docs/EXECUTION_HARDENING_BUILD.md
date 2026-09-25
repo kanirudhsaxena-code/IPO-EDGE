@@ -43,11 +43,11 @@ Acceptance: every execution-related miss has a reproducible root-cause code.
 ### EH-02 — Universe discovery hardening
 Owner: ChatGPT Executor
 Target: Cycles 2–4
-- [ ] Build source union across NSE, BSE, SEBI, Upstox IPO API, and approved specialist calendars.
-- [ ] Reconcile Mainboard and SME independently.
-- [ ] Require explicit enumeration/completeness evidence before a cycle can be COMPLETED.
-- [ ] Treat source outage or empty parse as PARTIAL/FAILED unless independent sources prove the scoped universe.
-- [ ] Add per-source health and discrepancy logging.
+- [ ] Build source union across NSE, BSE, SEBI, Upstox IPO API, and approved specialist calendars. Reconciliation core committed in `scripts/execution_hardening_universe.py`; provider adapters remain pending.
+- [x] Reconcile Mainboard and SME independently. Evidence: `reconcile_universe()` plus `test_mainboard_and_sme_reconcile_independently`.
+- [x] Require explicit enumeration/completeness evidence before a cycle can be COMPLETED. Evidence: healthy source requires `enumerated` and `parse_ok`; completeness tests in `tests/test_execution_hardening_universe.py`.
+- [x] Treat source outage or empty parse as PARTIAL/FAILED unless independent sources prove the scoped universe. Evidence: fail-closed reconciliation and empty-universe tests.
+- [x] Add per-source health and discrepancy logging. Evidence: `SourceRun.healthy`, `healthy_sources`, and per-source `discrepancies` in reconciliation result.
 Acceptance: no single source can silently define an empty or incomplete universe.
 
 ### EH-03 — Canonical identity resolver
