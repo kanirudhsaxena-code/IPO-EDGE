@@ -1,5 +1,17 @@
+import importlib.util
+from pathlib import Path
+
 import pytest
-from scripts.execution_hardening_observability import IPODiagnostic, build_execution_diagnostics, canonical_efficacy_view
+
+MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "execution_hardening_observability.py"
+spec = importlib.util.spec_from_file_location("execution_hardening_observability", MODULE_PATH)
+module = importlib.util.module_from_spec(spec)
+assert spec and spec.loader
+spec.loader.exec_module(module)
+
+IPODiagnostic = module.IPODiagnostic
+build_execution_diagnostics = module.build_execution_diagnostics
+canonical_efficacy_view = module.canonical_efficacy_view
 
 
 def test_diagnostics_expose_counts_ipo_details_and_provider_health():
