@@ -17,7 +17,7 @@ Make the existing IPO EDGE V1.1 run completely, consistently, on time, with maxi
 - Upstox: read-only external data provider; must never be a single point of failure.
 
 ## Timeframe convention
-The executor runs every 4 hours. Targets are expressed in executor cycles rather than calendar promises.
+The executor runs hourly (rescheduled from every four hours on 2026-09-26 to prevent avoidable idle gaps). Targets are expressed in executor cycles rather than calendar promises.
 
 ## Build checklist
 
@@ -73,29 +73,29 @@ Acceptance: Upstox improves coverage but is never a single point of failure.
 ### EH-05 — Deterministic R1–R8 recovery ladder
 Owner: ChatGPT Executor
 Target: Cycles 4–7
-- [ ] Encode preferred and fallback source order per block.
-- [ ] Before NV, require two independent source attempts for each unresolved critical R2/R3/R4/R6/R7 block.
-- [ ] Stop blocked/CAPTCHA/401/403 routes and move to legitimate alternatives; no bypass attempts.
-- [ ] Persist provenance group and independence basis to prevent copied sources counting twice.
-- [ ] Distinguish source fetch success from parse success and factual verification.
+- [x] Encode preferred and fallback source order per block. Evidence: `SOURCE_ORDER` in `scripts/execution_hardening_recovery.py`, guarded for R1–R8 by `tests/test_execution_hardening_recovery.py`; CI #330 PASS.
+- [x] Before NV, require two independent source attempts for each unresolved critical R2/R3/R4/R6/R7 block. Evidence: `CRITICAL_BLOCKS`, `MIN_INDEPENDENT_ATTEMPTS`, provenance-group counting and guard tests; this is an execution recovery precondition only and does not decide NV; CI #330 PASS.
+- [x] Stop blocked/CAPTCHA/401/403 routes and move to legitimate alternatives; no bypass attempts. Evidence: `route_blocked` and deterministic `next_source()` skip attempted blocked routes, with 401/403/CAPTCHA tests; CI #330 PASS.
+- [x] Persist provenance group and independence basis to prevent copied sources counting twice. Evidence: every `RecoveryAttempt` requires `provenance_group` and `independence_basis`; same-provenance attempts count once; guarded by tests; CI #330 PASS.
+- [x] Distinguish source fetch success from parse success and factual verification. Evidence: independent `fetch_ok`, `parse_ok`, and `verified` states with fail-closed validation and audit output; CI #330 PASS.
 Acceptance: every critical NV shows exhausted, auditable recovery attempts.
 
 ### EH-06 — Research-priority routing (non-model)
 Owner: ChatGPT Executor
 Target: Cycles 5–7
-- [ ] Add operational `RESEARCH_PRIORITY` only; it must not change score, grade or recommendation.
-- [ ] Use already-verified strong partial signals to direct remaining retrieval effort to missing critical blocks.
-- [ ] Add guard test proving research priority cannot bypass NV or hard blockers.
+- [x] Add operational `RESEARCH_PRIORITY` only; it must not change score, grade or recommendation. Evidence: `scripts/execution_hardening_research_priority.py` contains routing only and explicitly returns `model_policy_changed: false`; CI #330 PASS.
+- [x] Use already-verified strong partial signals to direct remaining retrieval effort to missing critical blocks. Evidence: verified signals are caller-supplied inputs used only to raise retrieval urgency for unresolved critical blocks; guarded by `tests/test_execution_hardening_research_priority.py`; CI #330 PASS.
+- [x] Add guard test proving research priority cannot bypass NV or hard blockers. Evidence: `preserve_disposition()` retains disposition/hard blocker exactly, with explicit NO_ACTION/CRITICAL_EVIDENCE_NOT_VERIFIED test; CI #330 PASS.
 Acceptance: EDGE spends more effort on high-information unresolved IPOs without relaxing model policy.
 
 ### EH-07 — Final-day/T2 reliability
 Owner: ChatGPT Executor
 Target: Cycles 5–8
-- [ ] Strengthen closing-day issue reconciliation.
-- [ ] Validate final subscription timing after 19:00 Asia/Kolkata.
-- [ ] Require verified final fields according to existing V1.1 rules.
-- [ ] Never create retrospective T2; missed final-day runs remain explicit operational failures.
-- [ ] Add alert/status reason for each missed or unresolved T2.
+- [ ] Strengthen closing-day issue reconciliation. A deterministic `closing_day_plan()` now covers every supplied reconciled identity and rejects duplicate canonical IDs, but live universe/source-reconciliation wiring remains pending.
+- [x] Validate final subscription timing after 19:00 Asia/Kolkata. Evidence: `scripts/execution_hardening_t2.py` converts aware timestamps to Asia/Kolkata and returns `TOO_EARLY` before 19:00; guarded by tests; CI #330 PASS.
+- [x] Require verified final fields according to existing V1.1 rules. Evidence: T2 eligibility remains false with `FINAL_EVIDENCE_UNRESOLVED` unless the caller supplies verified final-field status from existing V1.1 verification; no new evidence rule introduced; CI #330 PASS.
+- [x] Never create retrospective T2; missed final-day runs remain explicit operational failures. Evidence: past closing dates return `MISSED_T2_NO_BACKDATE` with `can_create_t2=false`; the module performs no checkpoint creation/persistence; CI #330 PASS.
+- [x] Add alert/status reason for each missed or unresolved T2. Evidence: `T2Status` reason codes plus `unresolved_or_missed()` cover missed and final-evidence-unresolved states; guarded by tests; CI #330 PASS.
 Acceptance: every eligible closing issue is either timely T2 or explicitly unresolved with cause.
 
 ### EH-08 — Observability and console diagnostics
