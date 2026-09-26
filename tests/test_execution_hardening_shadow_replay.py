@@ -1,11 +1,17 @@
 from datetime import datetime, timezone
 import importlib.util
 from pathlib import Path
+import sys
 
 MODULE = Path(__file__).resolve().parents[1] / "scripts" / "execution_hardening_shadow_replay.py"
-spec = importlib.util.spec_from_file_location("execution_hardening_shadow_replay", MODULE)
-mod = importlib.util.module_from_spec(spec)
+MODULE_NAME = "execution_hardening_shadow_replay"
+spec = importlib.util.spec_from_file_location(MODULE_NAME, MODULE)
 assert spec and spec.loader
+mod = importlib.util.module_from_spec(spec)
+# dataclasses resolves postponed/type metadata through sys.modules while the
+# module body executes. Register this file-path-loaded module first, matching
+# normal import semantics without making scripts/ a package.
+sys.modules[MODULE_NAME] = mod
 spec.loader.exec_module(mod)
 
 FrozenCase = mod.FrozenCase
