@@ -62,12 +62,12 @@ Acceptance: one live IPO identity maps to one canonical research target without 
 ### EH-04 — Upstox read-only provider
 Owner: ChatGPT Executor
 Target: Cycles 3–6
-- [ ] Add provider behind feature flag `UPSTOX_ENABLED`.
-- [ ] Use IPO discovery/details for structured metadata where available.
-- [ ] Use read-only market/fundamental/news/market-information endpoints only where permitted and relevant.
-- [ ] Never treat Upstox as sole proof for critical evidence that requires official/independent corroboration.
-- [ ] Verify failure fallback: Upstox outage must not stop IPO EDGE.
-- [ ] If a credential is missing or rejected, log exact dependency and continue other-source execution.
+- [x] Add provider behind feature flag `UPSTOX_ENABLED`. Evidence: `scripts/execution_hardening_upstox.py` fails closed when disabled; guarded by `tests/test_execution_hardening_upstox.py`.
+- [ ] Use IPO discovery/details for structured metadata where available. Read-only operations are allow-listed, but credential-backed live transport evidence remains pending.
+- [x] Use read-only market/fundamental/news/market-information endpoints only where permitted and relevant. Evidence: explicit `READ_ONLY_OPERATIONS` allow-list rejects write/non-allow-listed operations; guarded by `test_non_read_only_operation_is_rejected`.
+- [x] Never treat Upstox as sole proof for critical evidence that requires official/independent corroboration. Evidence: `critical_evidence_satisfied()` requires an independent verified source; guarded by `test_upstox_never_satisfies_critical_evidence_alone`.
+- [x] Verify failure fallback: Upstox outage must not stop IPO EDGE. Evidence: provider/network exceptions return unavailable data rather than raising; guarded by `test_provider_outage_does_not_raise_or_stop_fallback`.
+- [x] If a credential is missing or rejected, log exact dependency and continue other-source execution. Evidence: missing credential returns explicit nonfatal `missing Upstox read-only credential`; guarded by `test_missing_credential_is_explicit_and_nonfatal`. Credential-backed rejection evidence remains operationally pending.
 Acceptance: Upstox improves coverage but is never a single point of failure.
 
 ### EH-05 — Deterministic R1–R8 recovery ladder
@@ -142,6 +142,8 @@ Only raise to the user when the executor cannot proceed without account-level ac
 - explicit approval to merge or activate production changes.
 
 Current transient dependency: the connected Neon read-only SQL interface is rejecting live EH-01 baseline execution because project resolution is unavailable. This does not block repository hardening; EH-01 tooling is read-only and ready to run once database read access is restored.
+
+Current EH-04 operational dependency: credential-backed Upstox live transport/discovery evidence is not yet available to this executor. This does not block independent hardening; the provider boundary fails closed and other-source execution continues.
 
 ## Non-negotiable acceptance gates
 1. Zero model-rule changes.
