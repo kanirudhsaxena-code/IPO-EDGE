@@ -74,18 +74,19 @@ Evidence: `scripts/execution_hardening_research_priority.py`, tests; CI #330 PAS
 Evidence: `scripts/execution_hardening_t2.py`, tests; CI #330 PASS.
 
 ### EH-08 — Observability and console diagnostics
-- [ ] Expose per-run expected/reconciled/researched/complete/NV/PARTIAL counts. Implementation committed `f94db57`; tests committed `27d9ee1`; awaiting CI before formal close.
-- [ ] Show per-IPO unresolved blocks, attempted sources, conflicts, identity status, and final disposition. Implementation/tests committed; awaiting CI.
-- [ ] Show source health and Upstox availability separately from framework efficacy. Implementation/tests committed; awaiting CI.
-- [ ] Separate canonical efficacy from execution diagnostics and replay/counterfactual analysis. Explicit separate payload kinds committed; awaiting CI.
+- [x] Expose per-run expected/reconciled/researched/complete/NV/PARTIAL counts.
+- [x] Show per-IPO unresolved blocks, attempted sources, conflicts, identity status, and final disposition.
+- [x] Show source health and Upstox availability separately from framework efficacy.
+- [x] Separate canonical efficacy from execution diagnostics and replay/counterfactual analysis.
+Evidence: `scripts/execution_hardening_observability.py`, `tests/test_execution_hardening_observability.py`; import-loader repair `1c49ddc`; CI #340 PASS and Live runtime integration #96 PASS on exact repair head.
 Acceptance: a PARTIAL/NV result is immediately diagnosable without reading raw receipts.
 
 ### EH-09 — Shadow replay and regression
-- [ ] Replay frozen historical cases under hardened execution without future-data leakage.
-- [ ] Keep canonical historical outcomes unchanged.
-- [ ] Verify same evidence => same V1.1 model output.
-- [ ] Measure reductions in retrieval-driven NV/PARTIAL, identity errors, universe gaps and missed T2s.
-- [ ] Flag model-related misses as DEFERRED, not fixed.
+- [ ] Replay frozen historical cases under hardened execution without future-data leakage. Fail-closed temporal replay guard committed `a7c661b`; tests `1467d5c`; full historical execution pending.
+- [ ] Keep canonical historical outcomes unchanged. Outcome-fingerprint immutability guard committed; awaiting CI before formal close.
+- [ ] Verify same evidence => same V1.1 model output. Identical-evidence output invariance guard committed; awaiting CI before formal close.
+- [ ] Measure reductions in retrieval-driven NV/PARTIAL, identity errors, universe gaps and missed T2s. Execution-only delta collector committed; awaiting CI/full replay.
+- [ ] Flag model-related misses as DEFERRED, not fixed. Replay classifier committed; awaiting CI before formal close.
 
 ### EH-10 — Prospective shadow run
 - [ ] Prospective alongside production rules after EH-00–EH-09 pass.
@@ -100,7 +101,7 @@ Acceptance: a PARTIAL/NV result is immediately diagnosable without reading raw r
 - [ ] Request explicit user approval before production merge/activation.
 
 ## Hard blockers / user-action dependencies
-Current transient dependency: Neon read-only SQL project resolution remains unavailable for live EH-01. This does not block repository hardening.
+Current transient dependency: Neon read-only SQL project resolution remains unavailable for live EH-01 and the database-backed EH-09 full historical replay. This does not block repository hardening.
 Current EH-04 dependency: credential-backed Upstox live transport/discovery evidence unavailable. This does not block independent hardening.
 
 ## Non-negotiable acceptance gates
