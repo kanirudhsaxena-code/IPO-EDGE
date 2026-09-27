@@ -97,7 +97,7 @@ Acceptance: a PARTIAL/NV result is immediately diagnosable without reading raw r
 - [ ] Categorized execution-only merge diff.
 - [ ] Prove zero model-rule changes.
 - [ ] Prove zero frozen-history mutation.
-- [ ] Document rollback.
+- [x] Document rollback. Evidence: additive fail-closed `docs/EXECUTION_HARDENING_ROLLBACK.md` committed as `7996953`; pre-merge disablement, post-approval selective-revert boundary and mandatory model/history/invariance verification documented.
 - [ ] Request explicit user approval before production merge/activation.
 
 ## Hard blockers / user-action dependencies
