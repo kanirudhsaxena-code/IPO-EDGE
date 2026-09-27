@@ -82,11 +82,11 @@ Evidence: `scripts/execution_hardening_observability.py`, `tests/test_execution_
 Acceptance: a PARTIAL/NV result is immediately diagnosable without reading raw receipts.
 
 ### EH-09 — Shadow replay and regression
-- [ ] Replay frozen historical cases under hardened execution without future-data leakage. Fail-closed temporal replay guard committed `a7c661b`; tests `1467d5c`; full historical execution pending.
-- [ ] Keep canonical historical outcomes unchanged. Outcome-fingerprint immutability guard committed; awaiting CI before formal close.
-- [ ] Verify same evidence => same V1.1 model output. Identical-evidence output invariance guard committed; awaiting CI before formal close.
-- [ ] Measure reductions in retrieval-driven NV/PARTIAL, identity errors, universe gaps and missed T2s. Execution-only delta collector committed; awaiting CI/full replay.
-- [ ] Flag model-related misses as DEFERRED, not fixed. Replay classifier committed; awaiting CI before formal close.
+- [ ] Replay frozen historical cases under hardened execution without future-data leakage. Fail-closed temporal replay guard committed `a7c661b`; frozen replay orchestrator `02ba4e7`; tests `1467d5c`, `7ae4a6d`; full historical execution pending Neon read access.
+- [x] Keep canonical historical outcomes unchanged. Outcome-fingerprint immutability guard and frozen-population orchestrator tests PASS on CI #352 / Live runtime #102 (`7ae4a6d`).
+- [x] Verify same evidence => same V1.1 model output. Identical-evidence score/grade/decision invariance guard PASS on CI #352 / Live runtime #102 (`7ae4a6d`).
+- [ ] Measure reductions in retrieval-driven NV/PARTIAL, identity errors, universe gaps and missed T2s. Execution-only delta collector/orchestrator committed and green; full historical replay population still pending Neon read access.
+- [x] Flag model-related misses as DEFERRED, not fixed. Replay classifier guard PASS on CI #352 / Live runtime #102 (`7ae4a6d`).
 
 ### EH-10 — Prospective shadow run
 - [ ] Prospective alongside production rules after EH-00–EH-09 pass.
