@@ -13,15 +13,15 @@ def test_cross_language_semantic_hash_vector_matches_console():
     basis = {
         "presentation_contract_version": "P0_11_PRESENTATION_V1",
         "engine": "5DR",
-        "identity": {"run_id": "run-42", "result_id": "forecast-7", "checkpoint_id": None},
+        "identity": {"run_id": "42", "result_id": "forecast-7", "checkpoint_id": None},
         "governance_state": "SELECTED",
         "sections": [
-            {"name": "TABLE_1_5DR_OUTCOME", "value": 1.0, "probability": 42.5, "verified": True},
-            {"name": "TABLE_2_5DR_DRILL_DOWN", "items": ["PVPO", None, -0.0]},
+            {"name": "TABLE_1_5DR_ASSESSMENT_EFFICACY", "value": 1.0, "probability": 42.5, "verified": True},
+            {"name": "TABLE_2_CURRENT_5DR_RUN", "items": ["PVPO", None, -0.0]},
         ],
         "source_payload_hash": "source-abc",
     }
-    assert semantic_presentation_hash(basis) == "43cab49103f841c9a85d2213756ecb6db2ee54cbdbb5c0ec6545cc7dbb80b020"
+    assert semantic_presentation_hash(basis) == "c7ab9fc4e43a3d10460f99b1e8bada4147e85f4878880ddd12c08bf66c4b0127"
 
 
 def test_ipo_snapshot_requires_four_master_tables_and_exact_t2_identity():
