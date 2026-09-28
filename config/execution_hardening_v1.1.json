@@ -1,0 +1,26 @@
+{
+  "version": "1.1-execution-hardening",
+  "model_policy": "FROZEN",
+  "shadow_only": true,
+  "production_writes": false,
+  "rollback": {
+    "master_enabled": false,
+    "behavior_when_disabled": "Use existing V1.1 execution path unchanged"
+  },
+  "features": {
+    "source_union": false,
+    "identity_resolver": false,
+    "upstox_provider": false,
+    "deterministic_recovery": false,
+    "research_priority": false,
+    "t2_reliability": false,
+    "execution_diagnostics": false
+  },
+  "invariants": {
+    "allow_model_changes": false,
+    "allow_historical_checkpoint_mutation": false,
+    "allow_historical_outcome_mutation": false,
+    "allow_retrospective_t2": false,
+    "allow_future_evidence": false
+  }
+}
