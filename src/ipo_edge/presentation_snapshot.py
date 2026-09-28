@@ -1,9 +1,7 @@
 """P0-11 immutable user-facing presentation snapshot contract for IPO EDGE.
 
 Presentation/persistence semantics only. No grading, scoring, checkpoint selection,
-efficacy, learning adoption or trading behavior is changed. Production persistence
-remains disabled until the schema migration is validated on a temporary Neon
-branch and explicitly approved for production application.
+efficacy, learning adoption or trading behavior is changed.
 """
 from __future__ import annotations
 
@@ -72,36 +70,20 @@ def _validate_sections(sections: Sequence[Mapping[str, Any]]) -> list[dict[str, 
     return normalized
 
 
-def build_presentation_snapshot(
-    *,
-    run_id: str | int,
-    ipo_id: str | int,
-    checkpoint_id: str | int,
-    governance_state: str,
-    sections: Sequence[Mapping[str, Any]],
-    source_payload_hash: str,
-) -> dict[str, Any]:
-    if not str(run_id).strip():
-        raise ValueError("PRESENTATION_MISSING_RUN_ID")
-    if not str(ipo_id).strip():
-        raise ValueError("PRESENTATION_MISSING_RESULT_ID")
-    if not str(checkpoint_id).strip():
-        raise ValueError("PRESENTATION_MISSING_CHECKPOINT_ID")
-    if not str(governance_state).strip():
-        raise ValueError("PRESENTATION_MISSING_GOVERNANCE_STATE")
-    if not str(source_payload_hash).strip():
-        raise ValueError("PRESENTATION_MISSING_SOURCE_HASH")
+def build_presentation_snapshot(*, run_id: str | int, ipo_id: str | int,
+    checkpoint_id: str | int, governance_state: str,
+    sections: Sequence[Mapping[str, Any]], source_payload_hash: str) -> dict[str, Any]:
+    if not str(run_id).strip(): raise ValueError("PRESENTATION_MISSING_RUN_ID")
+    if not str(ipo_id).strip(): raise ValueError("PRESENTATION_MISSING_RESULT_ID")
+    if not str(checkpoint_id).strip(): raise ValueError("PRESENTATION_MISSING_CHECKPOINT_ID")
+    if not str(governance_state).strip(): raise ValueError("PRESENTATION_MISSING_GOVERNANCE_STATE")
+    if not str(source_payload_hash).strip(): raise ValueError("PRESENTATION_MISSING_SOURCE_HASH")
     normalized_sections = _validate_sections(sections)
     basis = {
         "presentation_contract_version": PRESENTATION_CONTRACT_VERSION,
         "engine": ENGINE,
-        "identity": {
-            "run_id": str(run_id),
-            "result_id": str(ipo_id),
-            "checkpoint_id": str(checkpoint_id),
-        },
-        "governance_state": str(governance_state),
-        "sections": normalized_sections,
+        "identity": {"run_id": str(run_id), "result_id": str(ipo_id), "checkpoint_id": str(checkpoint_id)},
+        "governance_state": str(governance_state), "sections": normalized_sections,
         "source_payload_hash": str(source_payload_hash),
     }
     return {**basis, "presentation_hash": semantic_presentation_hash(basis)}
@@ -110,12 +92,55 @@ def build_presentation_snapshot(
 def assert_presentation_snapshot(snapshot: Mapping[str, Any]) -> None:
     if snapshot.get("presentation_contract_version") != PRESENTATION_CONTRACT_VERSION:
         raise ValueError("PRESENTATION_CONTRACT_VERSION_UNSUPPORTED")
-    if snapshot.get("engine") != ENGINE:
-        raise ValueError("PRESENTATION_ENGINE_MISMATCH")
+    if snapshot.get("engine") != ENGINE: raise ValueError("PRESENTATION_ENGINE_MISMATCH")
     presentation_hash = snapshot.get("presentation_hash")
-    if not isinstance(presentation_hash, str):
-        raise ValueError("PRESENTATION_HASH_MISSING")
+    if not isinstance(presentation_hash, str): raise ValueError("PRESENTATION_HASH_MISSING")
     basis = {key: value for key, value in snapshot.items() if key != "presentation_hash"}
-    if semantic_presentation_hash(basis) != presentation_hash:
-        raise ValueError("PRESENTATION_HASH_MISMATCH")
+    if semantic_presentation_hash(basis) != presentation_hash: raise ValueError("PRESENTATION_HASH_MISMATCH")
     _validate_sections(snapshot.get("sections", []))
+
+
+def build_live_sections(conn, ipo_id: int, checkpoint_id: int) -> list[dict[str, Any]]:
+    """Freeze the four current-master IPO presentation sections at issuance time."""
+    efficacy = conn.execute("""SELECT as_of_date,framework_version,universe_count,recommendation_count,
+      positive_hit_rate,twenty_percent_hit_rate,opportunity_capture_rate,forecast_error
+      FROM efficacy_snapshots ORDER BY as_of_date DESC,framework_version LIMIT 20""").fetchall()
+    missed = conn.execute("""SELECT i.company_name,c.framework_version,c.grade,o.listing_gain_percent
+      FROM listing_outcomes o JOIN ipos i USING(ipo_id)
+      JOIN LATERAL (SELECT * FROM checkpoints x WHERE x.ipo_id=i.ipo_id AND checkpoint_type='T2_FINAL_DAY'
+        AND (checkpoint_time AT TIME ZONE 'Asia/Kolkata')::date<o.listing_date
+        ORDER BY checkpoint_time DESC,checkpoint_id DESC LIMIT 1) c ON true
+      WHERE c.grade NOT IN ('A+','A++') AND o.listing_gain_percent>=20 ORDER BY o.listing_date DESC,i.company_name""").fetchall()
+    learning = conn.execute("""SELECT learning_id,hypothesis,validation_result,status,adopted_framework_version
+      FROM learnings ORDER BY learning_id""").fetchall()
+    current = conn.execute("""SELECT i.ipo_id,i.company_name,i.segment,i.issue_open_date,i.issue_close_date,i.listing_date,
+      c.checkpoint_id,c.checkpoint_type,c.checkpoint_time,c.framework_version,c.score,c.grade,c.decision,
+      c.bear_gain_estimate,c.base_gain_estimate,c.bull_gain_estimate,c.confidence,c.hard_blocker,c.evidence_delta_summary
+      FROM ipos i JOIN checkpoints c ON c.ipo_id=i.ipo_id WHERE i.ipo_id=%s AND c.checkpoint_id=%s""",
+      (ipo_id,checkpoint_id)).fetchone()
+    if not current: raise ValueError("PRESENTATION_EXACT_CHECKPOINT_NOT_FOUND")
+    def rows(items): return [dict(r) for r in items]
+    return [
+      {"name":"EFFICACY_ASSESSMENT","rows":rows(efficacy)},
+      {"name":"MISSED_OPPORTUNITIES","rows":rows(missed)},
+      {"name":"CONTINUOUS_LEARNINGS","rows":rows(learning)},
+      {"name":"CURRENT_OPPORTUNITIES","rows":[dict(current)]},
+    ]
+
+
+def persist_live_snapshot(conn, *, run_id: int, ipo_id: int, checkpoint_id: int,
+                          source_payload_hash: str) -> dict[str, Any]:
+    """Persist once, in the caller's checkpoint transaction; any failure rolls it back."""
+    sections = build_live_sections(conn, ipo_id, checkpoint_id)
+    snapshot = build_presentation_snapshot(run_id=run_id, ipo_id=ipo_id, checkpoint_id=checkpoint_id,
+        governance_state="SELECTED", sections=sections, source_payload_hash=source_payload_hash)
+    assert_presentation_snapshot(snapshot)
+    row = conn.execute("""INSERT INTO presentation_snapshots
+      (presentation_contract_version,engine,run_id,ipo_id,result_id,checkpoint_id,governance_state,sections,source_payload_hash,presentation_hash)
+      VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+      RETURNING presentation_snapshot_id""",
+      (snapshot["presentation_contract_version"],snapshot["engine"],run_id,ipo_id,str(ipo_id),checkpoint_id,
+       snapshot["governance_state"],json.dumps(snapshot["sections"],default=str,separators=(",",":")),
+       source_payload_hash,snapshot["presentation_hash"])).fetchone()
+    if not row: raise RuntimeError("PRESENTATION_SNAPSHOT_INSERT_FAILED")
+    return {**snapshot,"presentation_snapshot_id":str(row["presentation_snapshot_id"])}
