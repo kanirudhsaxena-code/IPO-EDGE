@@ -1,6 +1,10 @@
 name: IPO EDGE V1.1 Live
 on:
   workflow_dispatch:
+  schedule:
+    # P0-14 producer clock: 19:10 IST, after the governed 19:00 T2 cutoff.
+    # This is independent of the evening auditor/outcome workflows.
+    - cron: '40 13 * * 1-5'
   push:
     paths:
       - 'runtime/live_v11_trigger.txt'
