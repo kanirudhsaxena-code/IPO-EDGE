@@ -1,0 +1,72 @@
+name: P0-12 IPO Schema Contract Probe
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  schema-contract:
+    if: github.head_ref == 'p0-12-schema-contract-probe'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: ipo-edge-live
+    env:
+      DATABASE_URL: ${{ secrets.IPO_EDGE_RUNTIME_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --quiet psycopg[binary]
+      - name: Read schema contract only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL"
+          python - <<'PY' | tee p0-12-ipo-schema.json
+          import json, os
+          import psycopg
+          from psycopg.rows import dict_row
+
+          tables = [
+              'ipos','checkpoints','research_evidence','subscription_snapshots',
+              'market_sentiment_snapshots','listing_outcomes','assessments','learnings',
+              'efficacy_snapshots','run_log','runtime_receipts'
+          ]
+          with psycopg.connect(os.environ['DATABASE_URL'], row_factory=dict_row) as conn:
+              cols = conn.execute("""
+                select table_name,column_name,data_type,is_nullable,ordinal_position
+                  from information_schema.columns
+                 where table_schema='public' and table_name=any(%s)
+                 order by table_name,ordinal_position
+              """, (tables,)).fetchall()
+              present = [r['table_name'] for r in conn.execute("""
+                select table_name
+                  from information_schema.tables
+                 where table_schema='public' and table_name=any(%s)
+                 order by table_name
+              """, (tables,)).fetchall()]
+              checkpoint_counts = conn.execute("""
+                select checkpoint_type,count(*)::int as count
+                  from checkpoints
+                 group by checkpoint_type
+                 order by checkpoint_type
+              """).fetchall()
+          print(json.dumps({
+              'probe':'P0_12_IPO_SCHEMA_CONTRACT',
+              'requested_tables':tables,
+              'present_tables':present,
+              'columns':cols,
+              'checkpoint_type_counts':checkpoint_counts,
+              'credential_values_emitted':False,
+              'row_payloads_emitted':False,
+          }, default=str, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p0-12-ipo-schema-contract
+          path: p0-12-ipo-schema.json
+          retention-days: 7
